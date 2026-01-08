@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: audit-writer
+  namespace: "{{ apps_namespace }}"
+  labels:
+    app: audit-writer
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: audit-writer
+
+  template:
+    metadata:
+      labels:
+        app: audit-writer
+
+    spec:
+      containers:
+        - name: audit-writer
+          image: "{{ audit_writer_image }}"
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - containerPort: 8080
+
+          env:
+            - name: DB_HOST
+              value: "{{ db_host }}"
+
+            - name: DB_PORT
+              value: "{{ db_port | string }}"
+
+            - name: DB_NAME
+              value: "{{ db_name }}"
+
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ audit_writer_db_secret_name }}"
+                  key: username
+
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ audit_writer_db_secret_name }}"
+                  key: password
+
+            - name: DB_AUDIT_SCHEMA
+              value: "{{ audit_schema_name }}"
+
+            - name: DB_AUDIT_TABLE
+              value: "{{ audit_table_name }}"
+
+            - name: AUDIT_MODE
+              value: "{{ audit_mode }}"
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+

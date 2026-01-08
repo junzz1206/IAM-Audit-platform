@@ -1,0 +1,133 @@
+---
+# ==========================================================
+# Role: ingest-service
+#
+# 목적:
+# - CSV Ingest 서비스 Kubernetes 배포
+# - 실행 시마다 깨끗한 상태 보장 (env / spec 찌꺼기 제거)
+#
+# 핵심 설계:
+# - src 방식 ❌
+# - definition + template + from_yaml 방식 ✅
+# - replicas / port / quantity 타입 안정성 보장
+# - Kubernetes API 호출은 localhost에서만 수행
+# ==========================================================
+
+
+# ----------------------------------------------------------
+# 0. Ingest 서비스 실행 여부 가드
+# ----------------------------------------------------------
+- name: Check if CSV ingest service is enabled
+  ansible.builtin.assert:
+    that:
+      - csv_ingest_enabled | bool
+    fail_msg: "csv_ingest_enabled=false 이므로 ingest-service 배포를 중단합니다."
+  tags:
+    - ingest
+    - guard
+
+
+# ----------------------------------------------------------
+# 1. Ingest 서비스 Namespace 보장
+# ----------------------------------------------------------
+- name: Ensure ingest application namespace exists
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ apps_namespace }}"
+  delegate_to: localhost
+  run_once: true
+  tags:
+    - ingest
+    - namespace
+
+
+# ----------------------------------------------------------
+# 2. 🔐 Ingest DB Secret 생성 (🔥 필수)
+#    - Deployment 전에 반드시 존재해야 함
+# ----------------------------------------------------------
+- name: Create ingest DB Secret
+  kubernetes.core.k8s:
+    state: present
+    namespace: "{{ apps_namespace }}"
+    definition: >-
+      {{
+        lookup(
+          'template',
+          role_path ~ '/k8s/secret.yml'
+        )
+        | from_yaml
+      }}
+  delegate_to: localhost
+  run_once: true
+  tags:
+    - ingest
+    - secret
+
+
+# ----------------------------------------------------------
+# 3. 🔥 기존 Ingest Deployment 강제 제거
+#    - 이전 env / replicas / image 찌꺼기 완전 제거
+# ----------------------------------------------------------
+- name: Cleanup ingest service Deployment (force clean)
+  kubernetes.core.k8s:
+    state: absent
+    api_version: apps/v1
+    kind: Deployment
+    name: ingest-service
+    namespace: "{{ apps_namespace }}"
+  delegate_to: localhost
+  run_once: true
+  ignore_errors: true
+  tags:
+    - ingest
+    - cleanup
+
+
+# ----------------------------------------------------------
+# 4. Ingest Deployment 배포 (🔥 타입 안전 핵심)
+#    - Jinja → YAML → dict → Kubernetes
+# ----------------------------------------------------------
+- name: Deploy ingest service Deployment
+  kubernetes.core.k8s:
+    state: present
+    namespace: "{{ apps_namespace }}"
+    definition: >-
+      {{
+        lookup(
+          'template',
+          role_path ~ '/k8s/deployment.yml'
+        )
+        | from_yaml
+      }}
+  delegate_to: localhost
+  run_once: true
+  tags:
+    - ingest
+    - deployment
+
+
+# ----------------------------------------------------------
+# 5. Ingest Service 배포
+# ----------------------------------------------------------
+- name: Deploy ingest service Service
+  kubernetes.core.k8s:
+    state: present
+    namespace: "{{ apps_namespace }}"
+    definition: >-
+      {{
+        lookup(
+          'template',
+          role_path ~ '/k8s/service.yml'
+        )
+        | from_yaml
+      }}
+  delegate_to: localhost
+  run_once: true
+  tags:
+    - ingest
+    - service
+

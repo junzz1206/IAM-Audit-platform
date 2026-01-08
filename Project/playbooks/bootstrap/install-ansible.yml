@@ -1,0 +1,25 @@
+---
+- name: Install Ansible
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Install EPEL repo (RHEL/CentOS/Rocky)
+      ansible.builtin.yum:
+        name: epel-release
+        state: present
+
+    - name: Install Ansible
+      ansible.builtin.yum:
+        name: ansible
+        state: present
+
+    - name: Verify Ansible version
+      ansible.builtin.command: ansible --version
+      register: ansible_ver
+
+    - name: Show Ansible version
+      ansible.builtin.debug:
+        msg: "{{ ansible_ver.stdout_lines }}"
+

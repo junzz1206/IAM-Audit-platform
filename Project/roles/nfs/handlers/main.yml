@@ -1,0 +1,10 @@
+# ==========================================================
+# NFS Role - Handlers
+# ==========================================================
+
+- name: Restart NFS service
+  ansible.builtin.service:
+    name: "{{ nfs_service_name }}"
+    state: restarted
+    enabled: true
+

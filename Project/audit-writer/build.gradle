@@ -1,0 +1,58 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.2.1'
+    id 'io.spring.dependency-management' version '1.1.4'
+}
+
+group = 'com.onprem.audit'
+version = '0.1.0-onprem'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // --------------------------------------------------
+    // Spring Boot Web (REST)
+    // --------------------------------------------------
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+
+    // --------------------------------------------------
+    // JDBC (NO JPA)
+    // --------------------------------------------------
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+
+    // --------------------------------------------------
+    // PostgreSQL Driver
+    // --------------------------------------------------
+    runtimeOnly 'org.postgresql:postgresql'
+
+    // --------------------------------------------------
+    // Validation (optional but safe)
+    // --------------------------------------------------
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // --------------------------------------------------
+    // Test (kept minimal)
+    // --------------------------------------------------
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+}
+
+bootJar {
+    archiveFileName = 'audit-writer-0.1.0-onprem.jar'
+}
+
+springBoot {
+    mainClass = 'com.onprem.audit.writer.AuditWriterApplication'
+}
+

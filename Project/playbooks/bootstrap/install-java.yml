@@ -1,0 +1,36 @@
+---
+# playbooks/bootstrap/install-java.yml
+# ==========================================================
+# Install Java (OpenJDK 17) for Spring Boot
+# ==========================================================
+
+- name: Install OpenJDK 17
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Ensure OpenJDK 17 is installed
+      ansible.builtin.yum:
+        name: java-17-openjdk-devel
+        state: present
+
+    - name: Ensure JAVA_HOME environment variable is set
+      ansible.builtin.lineinfile:
+        path: /etc/profile.d/java.sh
+        line: 'export JAVA_HOME=/usr/lib/jvm/java-17-openjdk'
+        create: yes
+        state: present
+
+    - name: Add JAVA_HOME to PATH
+      ansible.builtin.lineinfile:
+        path: /etc/profile.d/java.sh
+        line: 'export PATH=$JAVA_HOME/bin:$PATH'
+        create: yes
+        state: present
+
+    - name: Source Java environment
+      ansible.builtin.shell: source /etc/profile.d/java.sh
+      args:
+        executable: /bin/bash
+

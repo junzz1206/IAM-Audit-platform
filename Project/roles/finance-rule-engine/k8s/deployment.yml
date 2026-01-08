@@ -1,0 +1,142 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: finance-rule-engine
+  namespace: "{{ apps_namespace }}"
+  labels:
+    app: finance-rule-engine
+
+spec:
+  # --------------------------------------------------
+  # 배포 전략: 기존 파드 완전 종료 후 재생성
+  # --------------------------------------------------
+  strategy:
+    type: Recreate
+
+  replicas: {{ rule_engine_replicas | int }}
+
+  selector:
+    matchLabels:
+      app: finance-rule-engine
+
+  template:
+    metadata:
+      labels:
+        app: finance-rule-engine
+
+    spec:
+      terminationGracePeriodSeconds: 30
+
+      # --------------------------------------------------
+      # Pod Security Context
+      # --------------------------------------------------
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+
+      containers:
+        - name: finance-rule-engine
+          image: "{{ rule_engine_image }}"
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - containerPort: {{ rule_engine_port | int }}
+
+          # --------------------------------------------------
+          # Environment Variables
+          # --------------------------------------------------
+          env:
+            # DB Connection
+            - name: DB_HOST
+              value: "{{ db_host }}"
+            - name: DB_PORT
+              value: "{{ db_port | string }}"
+            - name: DB_NAME
+              value: "{{ db_name }}"
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ finance_engine_db_secret_name }}"
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ finance_engine_db_secret_name }}"
+                  key: password
+
+            # DB Schema / Table
+            - name: DB_FINANCE_SCHEMA
+              valueFrom:
+                configMapKeyRef:
+                  name: "{{ rule_engine_configmap_name }}"
+                  key: DB_FINANCE_SCHEMA
+            - name: DB_AUDIT_SCHEMA
+              valueFrom:
+                configMapKeyRef:
+                  name: "{{ rule_engine_configmap_name }}"
+                  key: DB_AUDIT_SCHEMA
+            - name: DB_RAW_TX_TABLE
+              valueFrom:
+                configMapKeyRef:
+                  name: "{{ rule_engine_configmap_name }}"
+                  key: DB_RAW_TX_TABLE
+            - name: DB_RULE_TABLE
+              valueFrom:
+                configMapKeyRef:
+                  name: "{{ rule_engine_configmap_name }}"
+                  key: DB_RULE_TABLE
+            - name: DB_RESULT_TABLE
+              valueFrom:
+                configMapKeyRef:
+                  name: "{{ rule_engine_configmap_name }}"
+                  key: DB_RESULT_TABLE
+            - name: DB_AUDIT_TABLE
+              valueFrom:
+                configMapKeyRef:
+                  name: "{{ rule_engine_configmap_name }}"
+                  key: DB_AUDIT_TABLE
+
+            # Rule Engine Runtime
+            - name: RULE_ENGINE_MODE
+              valueFrom:
+                configMapKeyRef:
+                  name: "{{ rule_engine_configmap_name }}"
+                  key: RULE_ENGINE_MODE
+            - name: RULE_EVALUATION_BATCH_SIZE
+              valueFrom:
+                configMapKeyRef:
+                  name: "{{ rule_engine_configmap_name }}"
+                  key: RULE_EVALUATION_BATCH_SIZE
+
+          # --------------------------------------------------
+          # ❌ Probes 제거 (Startup / Readiness / Liveness)
+          # 내부 Rule Engine 특성상 불필요
+          # --------------------------------------------------
+
+          # --------------------------------------------------
+          # Resources
+          # --------------------------------------------------
+          resources:
+            requests:
+              cpu: "{{ rule_engine_cpu_request }}"
+              memory: "{{ rule_engine_memory_request }}"
+            limits:
+              cpu: "{{ rule_engine_cpu_limit }}"
+              memory: "{{ rule_engine_memory_limit }}"
+
+          # --------------------------------------------------
+          # Container Security Context
+          # --------------------------------------------------
+          securityContext:
+            readOnlyRootFilesystem: true
+
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+

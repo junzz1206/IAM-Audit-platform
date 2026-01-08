@@ -1,0 +1,26 @@
+# ==========================================================
+# PostgreSQL Configuration Template
+# ==========================================================
+
+listen_addresses = '*'                     # CHANGE REQUIRED: 내부망 IP로 제한 권장
+port = 5432                                # PostgreSQL 기본 포트
+
+max_connections = 100                      # CHANGE REQUIRED: 예상 동시 연결 수 기준 조정
+
+shared_buffers = 256MB                     # CHANGE REQUIRED: 서버 메모리 기준 튜닝
+work_mem = 16MB                            # CHANGE REQUIRED: 쿼리 패턴에 따라 조정
+maintenance_work_mem = 64MB                # CHANGE REQUIRED: VACUUM/INDEX 기준 조정
+
+log_destination = 'stderr'                 # 로그 출력 대상
+logging_collector = on                    # 로그 수집 활성화
+log_directory = 'pg_log'                  # 로그 디렉토리
+log_filename = 'postgresql-%Y-%m-%d.log'  # 로그 파일명 패턴
+
+log_statement = 'none'                    # CHANGE REQUIRED: 필요 시 ddl/dml 로깅
+log_connections = on                      # 접속 로그 기록
+log_disconnections = on                   # 종료 로그 기록
+
+log_line_prefix = '%m [%p] %u@%d '        # 로그 포맷 (시간, PID, 사용자, DB)
+
+password_encryption = scram-sha-256        # CHANGE REQUIRED: 운영 정책 확정 필요
+

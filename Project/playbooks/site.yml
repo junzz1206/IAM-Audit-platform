@@ -1,0 +1,284 @@
+---
+# ==========================================================
+# site.yml
+#
+# Purpose:
+# - On-Premise 전체 시스템 배포의 단일 진입점 (Single Entry Point)
+# - 인프라 → DB → IAM → 비즈니스 서비스 → Read Path 순서 정의
+#
+# Design Principles:
+# - ❌ Fail Fast 비활성화
+# - ✅ 실패해도 다음 단계 계속 진행 (실행 우선)
+# - ✅ 단, 선행 조건 없는 앱 배포는 "스킵" 처리
+# - Role 단위 책임 분리 유지
+# ==========================================================
+
+# ==========================================================
+# -0.5. Bootstrap (최초 실행 환경 준비)
+# ==========================================================
+- name: Bootstrap build environment
+  hosts: all
+  become: true
+  gather_facts: false
+  roles:
+    - bootstrap
+
+# ==========================================================
+# Bootstrap Playbooks (조건부 실행은 각 playbook 안에서 처리)
+# ==========================================================
+
+# 0. Ansible 설치
+- import_playbook: bootstrap/install-ansible.yml
+
+# 1. Kubernetes 설치
+- import_playbook: bootstrap/install-k8s.yml
+
+# 2. Java + Spring Boot 설치
+- import_playbook: bootstrap/install-java.yml
+
+# 3. Gradle 8.5 설치
+- import_playbook: bootstrap/gradle-bootstrap.yml
+
+# ==========================================================
+# -1. Sync Source Code (Local → Server)
+# ==========================================================
+- name: Sync project source to server
+  import_playbook: sync-source.yml
+
+# ==========================================================
+# -0.5. Bootstrap (최초 실행 환경 준비)
+# ==========================================================
+- name: Bootstrap build environment
+  hosts: all
+  become: true
+  roles:
+    - bootstrap
+
+# ----------------------------------------------------------
+# 0. Preflight Check (WARN ONLY)
+# ----------------------------------------------------------
+- name: Preflight validation for on-premise (warn only)
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Warn if PostgreSQL bootstrap is disabled on onprem
+      ansible.builtin.debug:
+        msg: >
+          [WARN] postgres_bootstrap_enabled=false 상태입니다.
+          현재는 경고만 출력하고 배포를 계속 진행합니다.
+      when:
+        - env == "onprem"
+        - not postgres_bootstrap_enabled | bool
+
+
+# ----------------------------------------------------------
+# 0.5. Ensure Kubernetes Namespaces (REQUIRED)
+# ----------------------------------------------------------
+- name: Ensure Kubernetes namespaces exist
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Create namespaces
+      ansible.builtin.include_role:
+        name: k8s
+      tags:
+        - namespace
+
+
+# ----------------------------------------------------------
+# 1. Provision NFS Storage (OS + PV/PVC)
+# ----------------------------------------------------------
+- name: Provision NFS storage
+  hosts: k8s_control_plane
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Run NFS role (best effort)
+      ansible.builtin.include_role:
+        name: nfs
+      when: nfs_enabled | bool
+      tags:
+        - nfs
+      ignore_errors: true
+
+
+# ----------------------------------------------------------
+# 2. PostgreSQL Bootstrap (BEST EFFORT)
+# ----------------------------------------------------------
+- name: Bootstrap PostgreSQL (best effort)
+  hosts: db_servers
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Run PostgreSQL role (best effort)
+      ansible.builtin.include_role:
+        name: postgres
+      when: postgres_bootstrap_enabled | bool
+      tags:
+        - postgres
+        - postgres_bootstrap
+      ignore_errors: true
+
+# ----------------------------------------------------------
+# 2.5. Initialize DB Schema & Tables (DDL)
+# ----------------------------------------------------------
+- name: Initialize DB schema and tables
+  import_playbook: database/init_schema.yml
+  tags:
+    - db_schema
+  ignore_errors: false
+
+# ----------------------------------------------------------
+# 3. Verify Database Reachability (BEST EFFORT)
+# ----------------------------------------------------------
+- name: Verify PostgreSQL is reachable (best effort)
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Wait for PostgreSQL port to be available
+      ansible.builtin.wait_for:
+        host: "{{ db_host }}"
+        port: "{{ db_port }}"
+        timeout: 15
+      ignore_errors: true
+
+
+# ----------------------------------------------------------
+# 4. Deploy Monitoring Exporters
+# ----------------------------------------------------------
+- name: Deploy node-exporter
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Deploy node-exporter (best effort)
+      ansible.builtin.include_role:
+        name: monitoring/node-exporter
+      tags:
+        - monitoring
+        - node_exporter
+      ignore_errors: true
+
+
+- name: Deploy postgres-exporter
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Deploy postgres-exporter (best effort)
+      ansible.builtin.include_role:
+        name: monitoring/postgres-exporter
+      tags:
+        - monitoring
+        - postgres_exporter
+      ignore_errors: true
+
+
+# ----------------------------------------------------------
+# 5. Deploy IAM Service (CORE)
+# ----------------------------------------------------------
+- name: Deploy IAM service
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Deploy IAM service (best effort)
+      ansible.builtin.include_role:
+        name: iam-service
+      tags:
+        - iam
+      ignore_errors: true
+
+
+# ----------------------------------------------------------
+# 6. Verify PVC existence for CSV ingest
+# ----------------------------------------------------------
+- name: Verify CSV ingest PVC existence
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Check csv-ingest-pvc exists
+      ansible.builtin.command: >
+        kubectl get pvc csv-ingest-pvc -n onprem-apps -o name
+      register: ingest_pvc_check
+      changed_when: false
+      failed_when: false
+
+    - name: Set fact whether ingest PVC exists
+      ansible.builtin.set_fact:
+        ingest_pvc_exists: "{{ ingest_pvc_check.rc == 0 }}"
+
+    - name: Warn if ingest PVC is missing
+      ansible.builtin.debug:
+        msg: >
+          [WARN] csv-ingest-pvc가 존재하지 않습니다.
+          CSV ingest 서비스 배포를 건너뜁니다.
+      when: not ingest_pvc_exists
+
+
+# ----------------------------------------------------------
+# 7. Deploy CSV Ingest Service (PVC REQUIRED)
+# ----------------------------------------------------------
+- name: Deploy CSV ingest service
+  import_playbook: apps/deploy-ingest.yml
+  when: ingest_pvc_exists | bool
+  tags:
+    - ingest
+  ignore_errors: true
+
+
+# ----------------------------------------------------------
+# 8. Deploy Finance Rule Engine
+# ----------------------------------------------------------
+- name: Deploy finance rule engine
+  import_playbook: apps/deploy-rule-engine.yml
+  tags:
+    - rule_engine
+  ignore_errors: true
+
+
+# ----------------------------------------------------------
+# 9. Deploy Audit Writer
+# ----------------------------------------------------------
+- name: Deploy audit writer service
+  import_playbook: apps/deploy-audit-writer.yml
+  tags:
+    - audit_writer
+  ignore_errors: true
+
+
+# ----------------------------------------------------------
+# 10. Deploy Audit Relay
+# ----------------------------------------------------------
+- name: Deploy audit relay service
+  import_playbook: apps/deploy-audit-relay.yml
+  tags:
+    - audit_relay
+  ignore_errors: true
+
+
+# ----------------------------------------------------------
+# 11. Deploy Audit Reader (Read Path)
+# ----------------------------------------------------------
+- name: Deploy audit reader service
+  import_playbook: apps/deploy-audit-reader.yml
+  tags:
+    - audit_reader
+  ignore_errors: true
+
+
+# ----------------------------------------------------------
+# 12. Deploy Audit Query API (External Gateway)
+# ----------------------------------------------------------
+- name: Deploy audit query api
+  import_playbook: apps/deploy-audit-query-api.yml
+  tags:
+    - audit_query_api
+  ignore_errors: true
+

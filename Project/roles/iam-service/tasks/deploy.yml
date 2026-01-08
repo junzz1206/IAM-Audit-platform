@@ -1,0 +1,243 @@
+# ==========================================================
+# IAM Service – Image & Deployment Orchestration
+# ==========================================================
+# 역할:
+#  - IAM 서비스 컨테이너 이미지를 로컬에서 빌드
+#  - 이미지 tar를 k8s 노드로 전달
+#  - containerd(k8s.io)에 이미지 import
+#  - Kubernetes Deployment 적용 및 Pod Ready 대기
+# ==========================================================
+
+
+# ----------------------------------------------------------
+# 1. Detect containerd socket (k8s 노드에서 root 권한)
+# ----------------------------------------------------------
+
+- name: Detect containerd socket
+  stat:
+    path: "{{ item }}"
+  loop: "{{ containerd_socket_candidates }}"
+  register: containerd_socket_check
+  delegate_to: "{{ k8s_node_host }}"
+  become: true
+  run_once: true
+
+- name: Set containerd socket fact
+  set_fact:
+    containerd_socket: "{{ item.stat.path }}"
+  loop: "{{ containerd_socket_check.results }}"
+  when: item.stat.exists
+  loop_control:
+    label: "{{ item.stat.path }}"
+  run_once: true
+
+- name: Fail if containerd socket not found
+  fail:
+    msg: "containerd socket not found on {{ k8s_node_host }}. Checked: {{ containerd_socket_candidates }}"
+  when: containerd_socket is not defined
+  run_once: true
+
+
+# ----------------------------------------------------------
+# 2. Check local image existence (Ansible controller)
+# ----------------------------------------------------------
+
+- name: Check if IAM image exists locally
+  command:
+    argv:
+      - "{{ image_build_tool }}"
+      - image
+      - exists
+      - "{{ iam_service_image }}"
+  register: iam_image_exists
+  failed_when: false
+  changed_when: false
+  delegate_to: localhost
+  run_once: true
+
+
+# ----------------------------------------------------------
+# 3. Build image if missing (localhost)
+# ----------------------------------------------------------
+
+- name: Build IAM image locally with podman
+  command:
+    argv:
+      - "{{ image_build_tool }}"
+      - build
+      - "-t"
+      - "{{ iam_service_image }}"
+      - "."
+  args:
+    chdir: "{{ role_path }}/files"
+  when:
+    - local_image_build_enabled | bool
+    - iam_image_exists.rc != 0
+  delegate_to: localhost
+  run_once: true
+
+
+# ----------------------------------------------------------
+# 4. Normalize image tag (remove localhost/ prefix if exists)
+# ----------------------------------------------------------
+
+- name: Normalize IAM image tag
+  command:
+    argv:
+      - "{{ image_build_tool }}"
+      - tag
+      - "localhost/{{ iam_service_image }}"
+      - "{{ iam_service_image }}"
+  when: iam_image_exists.rc != 0
+  failed_when: false
+  delegate_to: localhost
+  run_once: true
+
+
+# ----------------------------------------------------------
+# 5. Remove existing image tar (idempotent)
+# ----------------------------------------------------------
+
+- name: Remove existing IAM image tar
+  file:
+    path: "{{ iam_image_tar }}"
+    state: absent
+  delegate_to: localhost
+  run_once: true
+
+
+# ----------------------------------------------------------
+# 6. Save image to tar (localhost)
+# ----------------------------------------------------------
+
+- name: Save IAM image to tar archive
+  command:
+    argv:
+      - "{{ image_build_tool }}"
+      - save
+      - "{{ iam_service_image }}"
+      - "-o"
+      - "{{ iam_image_tar }}"
+  when: local_image_load_enabled | bool
+  delegate_to: localhost
+  run_once: true
+
+
+# ----------------------------------------------------------
+# 7. Copy image tar to k8s node
+# ----------------------------------------------------------
+
+- name: Copy IAM image tar to k8s node
+  copy:
+    src: "{{ iam_image_tar }}"
+    dest: "{{ iam_image_tar }}"
+  when: local_image_load_enabled | bool
+  delegate_to: "{{ k8s_node_host }}"
+  run_once: true
+
+
+# ----------------------------------------------------------
+# 8. Import image into containerd (k8s node, root)
+# ----------------------------------------------------------
+
+- name: Import IAM image into containerd
+  command:
+    argv:
+      - ctr
+      - "-n"
+      - "{{ containerd_namespace }}"
+      - images
+      - import
+      - "{{ iam_image_tar }}"
+  when: local_image_load_enabled | bool
+  delegate_to: "{{ k8s_node_host }}"
+  become: true
+  run_once: true
+
+
+# ----------------------------------------------------------
+# 9. Verify image exists in containerd
+# ----------------------------------------------------------
+
+- name: Verify IAM image in containerd
+  command:
+    argv:
+      - ctr
+      - "-n"
+      - "{{ containerd_namespace }}"
+      - images
+      - ls
+  register: containerd_images
+  changed_when: false
+  delegate_to: "{{ k8s_node_host }}"
+  become: true
+  run_once: true
+
+- name: Fail if IAM image not found in containerd
+  fail:
+    msg: "IAM image {{ iam_service_image }} not found in containerd on {{ k8s_node_host }}"
+  when: iam_service_image not in containerd_images.stdout
+  run_once: true
+
+
+# ----------------------------------------------------------
+# 10. Cleanup old ReplicaSets / Pods
+# ----------------------------------------------------------
+
+- name: Cleanup old IAM ReplicaSets
+  command:
+    argv:
+      - kubectl
+      - delete
+      - rs
+      - "-n"
+      - "{{ iam_namespace }}"
+      - "-l"
+      - app=iam-service
+  failed_when: false
+  run_once: true
+
+- name: Cleanup old IAM Pods
+  command:
+    argv:
+      - kubectl
+      - delete
+      - pod
+      - "-n"
+      - "{{ iam_namespace }}"
+      - "-l"
+      - app=iam-service
+  failed_when: false
+  run_once: true
+
+
+# ----------------------------------------------------------
+# 11. Deploy IAM Service
+# ----------------------------------------------------------
+
+- name: Apply IAM Deployment
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'k8s/deployment.yml') }}"
+  run_once: true
+
+
+# ----------------------------------------------------------
+# 12. Wait for IAM Pod Ready
+# ----------------------------------------------------------
+
+- name: Wait for IAM pod to become Ready
+  kubernetes.core.k8s_info:
+    kind: Pod
+    namespace: "{{ iam_namespace }}"
+    label_selectors:
+      - app=iam-service
+  register: iam_pods
+  until: >
+    iam_pods.resources | length > 0 and
+    (iam_pods.resources[0].status.containerStatuses is defined) and
+    (iam_pods.resources[0].status.containerStatuses[0].ready | default(false))
+  retries: 30
+  delay: 10
+  run_once: true
+

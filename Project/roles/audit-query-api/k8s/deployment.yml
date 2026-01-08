@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: audit-query-api
+  namespace: "{{ audit_namespace }}"
+  labels:
+    app: audit-query-api
+
+spec:
+  replicas: {{ audit_query_api_replicas }}
+
+  strategy:
+    type: Recreate
+
+  selector:
+    matchLabels:
+      app: audit-query-api
+
+  template:
+    metadata:
+      labels:
+        app: audit-query-api
+
+    spec:
+      # --------------------------------------------------
+      # ServiceAccount (RBAC 대비)
+      # --------------------------------------------------
+      serviceAccountName: audit-query-api
+
+      containers:
+        - name: audit-query-api
+          image: "{{ audit_query_api_image }}"
+          imagePullPolicy: IfNotPresent   # 🔴 Never 쓰지 마라 (containerd 캐시 문제)
+
+          ports:
+            - containerPort: {{ audit_query_api_port }}
+
+          env:
+            # --------------------------------------------------
+            # 🔥 Spring Profile (이게 핵심)
+            # --------------------------------------------------
+            - name: SPRING_PROFILES_ACTIVE
+              value: "onprem"
+
+            # --------------------------------------------------
+            # API 서비스 포트
+            # --------------------------------------------------
+            - name: SERVICE_PORT
+              value: "{{ audit_query_api_port }}"
+
+            # --------------------------------------------------
+            # audit-reader 내부 접근 URL
+            # --------------------------------------------------
+            - name: AUDIT_READER_URL
+              value: "http://{{ audit_query_api_reader_host }}:{{ audit_query_api_reader_port }}"
+
+            # --------------------------------------------------
+            # IAM 토큰 검증 URL
+            # --------------------------------------------------
+            - name: IAM_VALIDATE_URL
+              value: "{{ iam_validate_url }}"
+

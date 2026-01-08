@@ -1,0 +1,100 @@
+---
+# ==========================================================
+# Apply Initial Data (DML)
+#
+# 역할:
+# - 애플리케이션에서 사용하는 초기 데이터 삽입
+#   (기본 계정, 기본 규칙, 초기 감사 로그 등)
+# - DDL / DCL 이후에만 실행
+#
+# 실행 정책:
+# - dml_apply_enabled=true 일 때만 실행
+# - site.yml 재실행 시 기본적으로 실행되지 않음
+# - DML은 idempotent 설계를 전제로 함
+#
+# 주의:
+# - 구조 변경(DDL)은 절대 포함하지 않음
+# - 판단 로직은 애플리케이션 책임
+# - 본 작업은 "초기화 / 테스트 / 수동 실행" 용도
+# ==========================================================
+
+- name: Apply initial DML data
+  hosts: k8s_control_plane
+  become: true
+  gather_facts: false
+  tags:
+    - postgres
+    - dml
+    - data_init
+
+  vars:
+    postgres_db_name: "{{ db_name }}"
+    postgres_sql_dir: "{{ postgres_sql_dir | default('/opt/sql') }}"
+    dml_sql_file: "{{ postgres_sql_dir }}/dml.sql"
+
+  pre_tasks:
+    # ------------------------------------------------------
+    # 실행 가드 (🔥 필수)
+    # ------------------------------------------------------
+    - name: Ensure DML apply is explicitly enabled
+      assert:
+        that:
+          - dml_apply_enabled | bool
+        fail_msg: >
+          DML execution is disabled.
+          This task inserts application data.
+          Set dml_apply_enabled=true to proceed.
+
+  tasks:
+    # ------------------------------------------------------
+    # 1. PostgreSQL 서비스 실행 보장
+    # ------------------------------------------------------
+    - name: Ensure PostgreSQL service is running
+      systemd:
+        name: "{{ postgres_service_name | default('postgresql') }}"
+        state: started
+      tags: postgres_service
+
+    # ------------------------------------------------------
+    # 2. PostgreSQL Python dependency 보장
+    # ------------------------------------------------------
+    - name: Ensure psycopg2 is installed
+      package:
+        name: python3-psycopg2
+        state: present
+      tags: postgres_dependency
+
+    # ------------------------------------------------------
+    # 3. SQL 스테이징 디렉터리 보안 보장
+    # ------------------------------------------------------
+    - name: Ensure SQL directory exists on DB host
+      file:
+        path: "{{ postgres_sql_dir }}"
+        state: directory
+        owner: postgres
+        group: postgres
+        mode: "0700"
+      tags: postgres_fs
+
+    # ------------------------------------------------------
+    # 4. DML SQL 파일 배치
+    # - Single Source of Truth: roles/postgres/files/dml.sql
+    # ------------------------------------------------------
+    - name: Deploy DML SQL file
+      copy:
+        src: "{{ playbook_dir }}/../../roles/postgres/files/dml.sql"
+        dest: "{{ dml_sql_file }}"
+        owner: postgres
+        group: postgres
+        mode: "0600"
+      tags: postgres_dml
+
+    # ------------------------------------------------------
+    # 5. DML 실행 (초기 데이터 삽입)
+    # ------------------------------------------------------
+    - name: Execute DML SQL (initial application data)
+      become_user: postgres
+      command: >
+        psql -d {{ postgres_db_name }} -v ON_ERROR_STOP=1 -f {{ dml_sql_file }}
+      tags: postgres_dml
+

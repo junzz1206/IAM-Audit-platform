@@ -1,0 +1,149 @@
+# ----------------------------------------------------------
+# Kubernetes Deployment for IAM Service
+# ----------------------------------------------------------
+
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: iam-service
+  namespace: "{{ iam_namespace }}"
+  labels:
+    app: iam-service
+
+spec:
+  replicas: 1
+
+  strategy:
+    type: Recreate
+
+  selector:
+    matchLabels:
+      app: iam-service
+
+  template:
+    metadata:
+      labels:
+        app: iam-service
+      annotations:
+        redeploy-ts: "{{ lookup('pipe', 'date -u +%Y%m%dT%H%M%SZ') }}"
+
+    spec:
+      terminationGracePeriodSeconds: 30
+
+      containers:
+        - name: iam-service
+
+          image: "{{ iam_service_image }}"
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - containerPort: {{ iam_service_port }}
+              protocol: TCP
+
+          # --------------------------------------------------
+          # Environment Variables (Spring Boot 표준)
+          # --------------------------------------------------
+          env:
+            # ===============================
+            # Spring Profile
+            # ===============================
+            - name: SPRING_PROFILES_ACTIVE
+              value: "onprem"
+
+            # ===============================
+            # Spring Datasource (PostgreSQL)
+            # ===============================
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://{{ db_host }}:{{ db_port }}/{{ db_name }}"
+
+            # 🔥 반드시 LOGIN USER
+            - name: SPRING_DATASOURCE_USERNAME
+              value: "{{ iam_app_db_user }}"   # iam_app_user
+
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ iam_db_secret_name }}"
+                  key: DB_PASSWORD
+
+            - name: SPRING_DATASOURCE_DRIVER_CLASS_NAME
+              value: "org.postgresql.Driver"
+
+            # ===============================
+            # HikariCP (❗ application.yml에서만 설정)
+            # ===============================
+            - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
+              value: "10"
+
+            - name: SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE
+              value: "2"
+
+            - name: SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT
+              value: "30000"
+
+            # ===============================
+            # IAM Domain
+            # ===============================
+            - name: DB_IAM_SCHEMA
+              value: "{{ iam_schema_name }}"
+
+            - name: DB_USERS_TABLE
+              value: "{{ iam_users_table }}"
+
+            - name: DB_CREDENTIALS_TABLE
+              value: "{{ iam_credentials_table }}"
+
+            - name: DB_ROLES_TABLE
+              value: "{{ iam_roles_table }}"
+
+            - name: DB_USER_ROLE_TABLE
+              value: "{{ iam_user_role_table }}"
+
+            # ===============================
+            # Audit Domain
+            # ===============================
+            - name: DB_AUDIT_SCHEMA
+              value: "{{ audit_schema_name }}"
+
+            - name: DB_AUDIT_TABLE
+              value: "{{ audit_table_name }}"
+
+            - name: AUDIT_MODE
+              value: "{{ audit_mode }}"
+
+            # ===============================
+            # Security / Environment
+            # ===============================
+            - name: PASSWORD_HASH_ALGORITHM
+              value: "{{ iam_password_hash_algorithm }}"
+
+            - name: IAM_ENVIRONMENT
+              value: "{{ env }}"
+
+          resources:
+            requests:
+              cpu: "{{ iam_service_cpu_request }}"
+              memory: "{{ iam_service_memory_request }}"
+            limits:
+              cpu: "{{ iam_service_cpu_limit }}"
+              memory: "{{ iam_service_memory_limit }}"
+
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: {{ iam_service_port }}
+            initialDelaySeconds: 90
+            periodSeconds: 20
+            timeoutSeconds: 2
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: {{ iam_service_port }}
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 5
+

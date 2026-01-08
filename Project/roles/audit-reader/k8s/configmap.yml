@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: audit-reader-config
+
+data:
+  AUDIT_READ_PRIORITY: ""
+  SERVICE_PORT: ""
+
+  AUDIT_QUERY_LIMIT: ""
+  AUDIT_VIOLATION_ONLY: ""
+  AUDIT_MIN_SEVERITY: ""
+
+  AUDIT_OS_INDEX: ""
+  OPENSEARCH_TIMEOUT_MS: ""
+  OS_HOST: ""
+  OS_PORT: ""
+
+  PG_HOST: ""
+  PG_DB: ""
+

@@ -1,0 +1,341 @@
+# ==========================================================
+# Global Variables for On-Premise Environment (SSOT)
+# inventories/onprem/group_vars/all.yml
+# ==========================================================
+
+# ----------------------------------------------------------
+# Environment / Cluster Identity
+# ----------------------------------------------------------
+env: onprem
+cluster_name: onprem-k8s
+
+# ----------------------------------------------------------
+# Network
+# ----------------------------------------------------------
+onprem_network_cidr: "192.168.223.0/24"
+k8s_pod_cidr: "172.16.0.0/16"
+onprem_master_ip: "192.168.223.128"
+onprem_gateway: "192.168.223.2"
+
+# ----------------------------------------------------------
+# OS / Runtime
+# ----------------------------------------------------------
+os_family: rocky
+container_runtime: containerd
+
+# ----------------------------------------------------------
+# Kubernetes
+# ----------------------------------------------------------
+k8s_node_host: onprem-master
+kubernetes_version: "1.29.15"
+dns_domain: "cluster.local"
+cni_plugin: calico
+
+# ----------------------------------------------------------
+# containerd
+# ----------------------------------------------------------
+containerd_namespace: "k8s.io"
+containerd_socket_candidates:
+  - /var/run/containerd/containerd.sock
+  - /run/containerd/containerd.sock
+
+# ----------------------------------------------------------
+# Image Control (Local Build / Load)
+# ----------------------------------------------------------
+local_image_build_enabled: true
+local_image_load_enabled: true
+
+image_build_tool: podman
+image_tmp_dir: /tmp
+image_name_prefix: "localhost/"
+
+# ----------------------------------------------------------
+# Storage (NFS)
+# ----------------------------------------------------------
+storage_type: nfs
+nfs_enabled: true
+
+nfs_server: "{{ onprem_master_ip }}"
+nfs_mount_base: /mnt/nfs
+nfs_pv_path: "{{ nfs_mount_base }}"
+
+csv_ingest_path: "{{ nfs_mount_base }}/csv-ingest"
+
+nfs_exports:
+  - path: "{{ nfs_mount_base }}"
+    clients: "{{ onprem_network_cidr }}"
+    options: "rw,sync,no_root_squash"
+  - path: "{{ csv_ingest_path }}"
+    clients: "{{ onprem_network_cidr }}"
+    options: "rw,sync,no_root_squash"
+
+nfs_storage_size: "10Gi"
+nfs_pv_name: "csv-ingest-pv"
+nfs_pvc_name: "csv-ingest-pvc"
+nfs_pvc_namespace: "{{ apps_namespace }}"
+
+# ----------------------------------------------------------
+# PostgreSQL (On-Premise)
+# ----------------------------------------------------------
+database_type: postgresql
+postgres_version: "15"
+
+db_name: onprem_finance_db
+postgres_app_db: "{{ db_name }}"
+
+db_port: 5432
+db_host_mode: node
+db_host_node: "{{ onprem_master_ip }}"
+db_host: "{{ db_host_node }}"
+
+db_admin_user: postgres
+
+postgres_data_dir: "/var/lib/pgsql/{{ postgres_version }}/data"
+postgres_conf_path: "{{ postgres_data_dir }}/postgresql.conf"
+
+postgres_sql_dir: /opt/sql
+postgres_service_name: "postgresql-{{ postgres_version }}"
+
+postgres_bootstrap_enabled: true
+postgres_schema_init_enabled: true
+postgres_roles_apply_enabled: true
+ddl_apply_enabled: true
+dml_apply_enabled: true
+
+postgres_allowed_node_cidr: "{{ onprem_network_cidr }}"
+postgres_allowed_pod_cidr: "{{ k8s_pod_cidr }}"
+
+postgres_ssl_enabled: false
+postgres_client_sslmode: "disable"
+
+# ----------------------------------------------------------
+# Kubernetes Namespaces
+# ----------------------------------------------------------
+iam_namespace: "onprem-iam"
+audit_namespace: "onprem-audit"
+monitoring_namespace: "onprem-monitoring"
+apps_namespace: "onprem-apps"
+
+# ----------------------------------------------------------
+# Security
+# ----------------------------------------------------------
+iam_password_hash_algorithm: bcrypt
+
+# ----------------------------------------------------------
+# IAM Service
+# ----------------------------------------------------------
+iam_image_name: iam-service
+iam_image_tag: "0.1.0-onprem"
+iam_service_image: "{{ image_name_prefix }}{{ iam_image_name }}:{{ iam_image_tag }}"
+iam_image_tar: "{{ image_tmp_dir }}/iam-service-{{ iam_image_tag }}.tar"
+
+iam_service_replicas: 1
+iam_service_port: 8080
+
+iam_service_cpu_request: "100m"
+iam_service_cpu_limit: "500m"
+iam_service_memory_request: "256Mi"
+iam_service_memory_limit: "512Mi"
+
+iam_validate_url: "http://iam-service.{{ iam_namespace }}.svc.cluster.local:{{ iam_service_port }}/validate" 
+  
+# ----------------------------------------------------------
+# IAM Database
+# ----------------------------------------------------------
+iam_app_db_user: iam_app_user
+iam_db_password: "password123"
+iam_db_secret_name: iam-db-secret
+
+iam_schema_name: iam
+iam_users_table: users
+iam_credentials_table: credentials
+iam_roles_table: roles
+iam_user_role_table: user_role
+
+# ----------------------------------------------------------
+# Audit Domain (DB)
+# ----------------------------------------------------------
+audit_schema_name: audit
+audit_table_name: audit_events
+audit_mode: append-only
+
+# ==========================================================
+# ✅ Audit Infra (공통) - 니가 터뜨린 변수들 SSOT로 추가
+# - deploy-audit-relay.yml / reader / writer에서 공통으로 참조 가능
+# ==========================================================
+# PostgreSQL (Audit 전용 접속 정보)
+audit_pg_host: "{{ db_host }}"
+audit_pg_port: "{{ db_port }}"
+audit_pg_db: "audit"
+audit_pg_user: "audit_service"
+audit_pg_password: "password123"
+
+# OpenSearch (Audit 전용)
+audit_os_host: "opensearch.onprem.svc.cluster.local"
+audit_os_port: 9200
+audit_os_index: "audit-events"
+audit_os_user: "audit_writer"
+audit_os_password: "password123"
+
+# ----------------------------------------------------------
+# Apps - CSV Ingest Service
+# ----------------------------------------------------------
+csv_ingest_enabled: true
+csv_ingest_image_name: ingest-service
+csv_ingest_image_tag: "0.1.0-onprem"
+csv_ingest_image: "{{ image_name_prefix }}{{ csv_ingest_image_name }}:{{ csv_ingest_image_tag }}"
+csv_ingest_image_tar: "{{ image_tmp_dir }}/ingest-service-{{ csv_ingest_image_tag }}.tar"
+
+csv_ingest_port: 8080
+csv_ingest_replicas: 1
+csv_ingest_cpu_request: "100m"
+csv_ingest_cpu_limit: "500m"
+csv_ingest_memory_request: "256Mi"
+csv_ingest_memory_limit: "512Mi"
+
+csv_ingest_nfs_path: "{{ csv_ingest_path }}"
+ingest_db_user: ingest_app_user
+ingest_db_password: "password123"
+ingest_db_secret_name: ingest-db-secret
+
+# ----------------------------------------------------------
+# Monitoring - Node Exporter
+# ----------------------------------------------------------
+node_exporter_image: quay.io/prometheus/node-exporter:v1.8.1
+node_exporter_port: 9100
+node_exporter_cpu_request: "50m"
+node_exporter_cpu_limit: "200m"
+node_exporter_memory_request: "64Mi"
+node_exporter_memory_limit: "128Mi"
+
+# ----------------------------------------------------------
+# Monitoring - PostgreSQL Exporter
+# ----------------------------------------------------------
+postgres_exporter_enabled: true
+postgres_exporter_image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0
+postgres_exporter_port: 9187
+postgres_exporter_replicas: 1
+postgres_exporter_db_host: "{{ db_host }}"
+postgres_exporter_db_port: "{{ db_port }}"
+postgres_exporter_db_name: "postgres"
+postgres_exporter_db_user: postgres_exporter
+postgres_exporter_db_password: "password123"
+postgres_exporter_namespace: "{{ monitoring_namespace }}"
+postgres_exporter_secret_name: postgres-exporter-secret
+postgres_exporter_queries_configmap: postgres-exporter-queries
+postgres_exporter_sslmode: "{{ postgres_client_sslmode }}"
+postgres_exporter_cpu_request: "50m"
+postgres_exporter_cpu_limit: "200m"
+postgres_exporter_memory_request: "64Mi"
+postgres_exporter_memory_limit: "128Mi"
+
+# ----------------------------------------------------------
+# Apps - Finance Rule Engine
+# ----------------------------------------------------------
+rule_engine_enabled: true
+rule_engine_image_name: finance-rule-engine
+rule_engine_image_tag: "0.1.0-onprem"
+rule_engine_image: "{{ image_name_prefix }}{{ rule_engine_image_name }}:{{ rule_engine_image_tag }}"
+rule_engine_replicas: 1
+rule_engine_port: 8080
+rule_engine_cpu_request: "100m"
+rule_engine_cpu_limit: "500m"
+rule_engine_memory_request: "256Mi"
+rule_engine_memory_limit: "512Mi"
+rule_engine_configmap_name: finance-rule-engine-config
+finance_engine_db_user: finance_engine_user
+finance_engine_db_password: "password123"
+finance_engine_db_secret_name: finance-engine-db-secret
+
+# ----------------------------------------------------------
+# Apps - Audit Relay
+# ----------------------------------------------------------
+audit_relay_enabled: true
+audit_relay_image_name: audit-relay
+audit_relay_image_tag: "0.1.0-onprem"
+audit_relay_image: "{{ image_name_prefix }}{{ audit_relay_image_name }}:{{ audit_relay_image_tag }}"
+audit_relay_namespace: "{{ audit_namespace }}"
+audit_relay_deployment_name: "audit-relay"
+audit_relay_serviceaccount_name: "audit-relay"
+audit_relay_app_label: "audit-relay"
+audit_relay_replicas: 1
+audit_relay_port: 8080
+audit_relay_cpu_request: "100m"
+audit_relay_cpu_limit: "500m"
+audit_relay_memory_request: "256Mi"
+audit_relay_memory_limit: "512Mi"
+audit_relay_db_user: audit_relay
+audit_relay_db_password: "password123"
+audit_relay_db_secret_name: audit-relay-db-secret
+audit_relay_batch_size: 500
+audit_relay_poll_interval: 5
+
+# ----------------------------------------------------------
+# Apps - Audit Reader
+# ----------------------------------------------------------
+audit_reader_enabled: true
+audit_reader_namespace: "{{ audit_namespace }}"
+audit_reader_image_name: audit-reader
+audit_reader_image_tag: "0.1.0-onprem"
+audit_reader_image: "{{ image_name_prefix }}{{ audit_reader_image_name }}:{{ audit_reader_image_tag }}"
+audit_reader_deployment_name: "audit-reader"
+audit_reader_serviceaccount_name: "audit-reader"
+audit_reader_app_label: "audit-reader"
+audit_reader_replicas: 1
+audit_reader_port: 8080
+audit_reader_cpu_request: "100m"
+audit_reader_cpu_limit: "500m"
+audit_reader_memory_request: "256Mi"
+audit_reader_memory_limit: "512Mi"
+audit_reader_db_user: audit_reader
+audit_reader_db_password: "password123"
+audit_reader_db_secret_name: audit-reader-db-secret
+audit_reader_service_port: 8080
+
+# ----------------------------------------------------------
+# Apps - Audit Query API
+# ----------------------------------------------------------
+audit_query_api_enabled: true
+audit_query_api_namespace: "{{ audit_namespace }}"
+
+# Apps - Audit Query API
+audit_query_api_image_name: audit-query-api
+audit_query_api_image_tag: "0.1.0-onprem"
+audit_query_api_image: "{{ image_name_prefix }}{{ audit_query_api_image_name }}:{{ audit_query_api_image_tag }}"
+
+
+audit_query_api_deployment_name: "audit-query-api"
+audit_query_api_serviceaccount_name: "audit-query-api"
+audit_query_api_app_label: "audit-query-api"
+audit_query_api_replicas: 1
+audit_query_api_port: 8080
+audit_query_api_cpu_request: "100m"
+audit_query_api_cpu_limit: "500m"
+audit_query_api_memory_request: "256Mi"
+audit_query_api_memory_limit: "512Mi"
+audit_query_api_db_user: audit_query_api
+audit_query_api_db_password: "password123"
+audit_query_api_db_secret_name: audit-query-api-db-secret
+
+audit_query_api_reader_host: "audit-reader.{{ audit_namespace }}.svc.cluster.local"
+audit_query_api_reader_port: 8080  
+
+
+# ----------------------------------------------------------
+# Apps - Audit Writer
+# ----------------------------------------------------------
+audit_writer_enabled: true
+audit_writer_namespace: "{{ apps_namespace }}"
+audit_writer_image_name: audit-writer
+audit_writer_image_tag: "0.1.0-onprem"
+audit_writer_image: "{{ image_name_prefix }}{{ audit_writer_image_name }}:{{ audit_writer_image_tag }}"
+audit_writer_replicas: 1
+audit_writer_port: 8080
+audit_writer_cpu_request: "100m"
+audit_writer_cpu_limit: "500m"
+audit_writer_memory_request: "256Mi"
+audit_writer_memory_limit: "512Mi"
+audit_writer_db_user: audit_writer
+audit_writer_db_password: "password123"
+audit_writer_db_secret_name: audit-writer-db-secret
+

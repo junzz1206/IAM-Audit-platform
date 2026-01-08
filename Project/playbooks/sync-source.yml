@@ -1,0 +1,29 @@
+---
+- name: Sync project source to server
+  hosts: onprem-master
+  become: true
+
+  vars:
+    local_project_root: "{{ playbook_dir }}/.."
+    remote_project_root: /opt/onprem-project
+
+  tasks:
+    - name: Ensure project directory exists on server
+      ansible.builtin.file:
+        path: "{{ remote_project_root }}"
+        state: directory
+        mode: '0755'
+
+    - name: Sync source code to server (exclude build artifacts)
+      ansible.posix.synchronize:
+        src: "{{ local_project_root }}/"
+        dest: "{{ remote_project_root }}/"
+        delete: false
+        recursive: true
+        rsync_opts:
+          - "--exclude=.git"
+          - "--exclude=.gradle"
+          - "--exclude=**/build"
+          - "--exclude=gradle-8.*"
+          - "--exclude=gradle.zip"
+

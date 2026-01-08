@@ -1,0 +1,103 @@
+---
+# ==========================================================
+# IAM Service Deployment Playbook
+#
+# 목적:
+# - IAM 서비스 배포의 단일 진입점
+# - Namespace → Secret → Deployment → Pod Ready 순서 보장
+#
+# 설계 원칙:
+# - Secret key는 고정 (Contract)
+# - value만 변수로 주입
+# - localhost에서 Kubernetes API만 사용
+#
+# 주의:
+# - group_vars/all.yml 은 inventory에서 자동 로드됨
+# - playbook에서 vars_files로 직접 include ❌
+# ==========================================================
+
+- name: Deploy IAM Service to On-Premise Kubernetes
+  hosts: localhost                 # kubectl / kubeconfig 기준 실행 노드
+  gather_facts: false              # OS facts 불필요
+  become: false                    # kubeconfig 기반 접근
+
+  # --------------------------------------------------------
+  # 로컬 변수 (경로 정의만)
+  # --------------------------------------------------------
+  vars:
+    iam_k8s_deployment: >
+      {{ playbook_dir }}/../../roles/iam-service/k8s/deployment.yml
+      # IAM Deployment Jinja 템플릿 경로
+
+  tasks:
+
+    # ======================================================
+    # 1. IAM Namespace 존재 보장
+    # ======================================================
+    - name: Ensure IAM namespace exists
+      kubernetes.core.k8s:
+        api_version: v1             # Kubernetes Core API
+        kind: Namespace             # Namespace 리소스
+        name: "{{ iam_namespace }}" # 예: onprem-iam (SSOT)
+        state: present              # 없으면 생성
+
+    # ======================================================
+    # 2. IAM DB 접근용 Secret 생성
+    #
+    # 핵심 원칙:
+    # - key 이름은 "계약" → 절대 변경 금지
+    # - value만 변수로 주입
+    # ======================================================
+    - name: Create or update IAM DB secret
+      kubernetes.core.k8s:
+        state: present              # 멱등성 보장
+        definition:
+          apiVersion: v1            # Core API
+          kind: Secret              # Secret 리소스
+          metadata:
+            name: "{{ iam_db_secret_name }}"  # iam-db-secret
+            namespace: "{{ iam_namespace }}"  # onprem-iam
+          type: Opaque
+          stringData:
+            DB_HOST: "{{ db_host }}"              # PostgreSQL host
+            DB_PORT: "{{ db_port | string }}"    # 포트는 문자열
+            DB_NAME: "{{ db_name }}"              # DB 이름
+            DB_USER: "{{ iam_app_db_user }}"      # IAM DB ROLE
+            DB_PASSWORD: "{{ iam_db_password }}" # 비밀번호
+      no_log: true                   # 🔐 Secret 값 로그 노출 방지
+
+    # ======================================================
+    # 3. IAM Deployment 배포
+    #
+    # - src 사용 (k8s 모듈이 Jinja 자동 렌더링)
+    # - lookup('template') ❌ (이중 렌더링 방지)
+    # ======================================================
+    - name: Deploy IAM service Deployment
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ iam_namespace }}"
+        src: "{{ iam_k8s_deployment }}"
+
+    # ======================================================
+    # 4. IAM Pod Ready 대기
+    #
+    # - Pod 존재만 확인 ❌
+    # - containerStatuses.ready == true 까지 대기
+    # ======================================================
+    - name: Wait for IAM pod to become Ready
+      kubernetes.core.k8s_info:
+        kind: Pod
+        namespace: "{{ iam_namespace }}"
+        label_selectors:
+          - "app=iam-service"
+      register: iam_pods
+
+      until:
+        - iam_pods.resources | length > 0
+        - iam_pods.resources[0].status.containerStatuses is defined
+        - iam_pods.resources[0].status.containerStatuses | length > 0
+        - iam_pods.resources[0].status.containerStatuses[0].ready | default(false)
+
+      retries: 30                    # 최대 30회
+      delay: 5                       # 5초 간격 (총 150초)
+

@@ -1,0 +1,25 @@
+# --------------------------------------------------
+# PostgreSQL Exporter Service
+# - Prometheus scrape 엔드포인트 제공
+# --------------------------------------------------
+
+apiVersion: v1                           # Service API
+kind: Service                            # Service 리소스
+
+metadata:
+  name: postgres-exporter                # Service 이름
+  namespace: "{{ monitoring_namespace }}"
+  labels:
+    app: postgres-exporter
+
+spec:
+  type: ClusterIP                        # 내부 접근용
+  selector:
+    app: postgres-exporter               # 대상 Pod 선택
+
+  ports:
+    - name: metrics
+      port: {{ postgres_exporter_port }} # Service 포트
+      targetPort: {{ postgres_exporter_port }}
+      protocol: TCP
+

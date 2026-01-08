@@ -1,0 +1,112 @@
+---
+# ==========================================================
+# Playbook: deploy-audit-query-api.yml
+# ==========================================================
+
+- name: Deploy audit-query-api
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    audit_query_api_k8s_dir: "{{ playbook_dir }}/../../roles/audit-query-api/k8s"
+
+  tasks:
+
+    # ------------------------------------------------------
+    # 0. 필수 변수 가드
+    # ------------------------------------------------------
+    - name: Ensure audit_namespace is defined
+      assert:
+        that:
+          - audit_namespace is defined
+          - audit_namespace | length > 0
+
+    # ------------------------------------------------------
+    # 1. Audit Namespace 존재 보장
+    # ------------------------------------------------------
+    - name: Ensure audit namespace exists
+      kubernetes.core.k8s:
+        api_version: v1
+        kind: Namespace
+        name: "{{ audit_namespace }}"
+        state: present
+
+    # ------------------------------------------------------
+    # 🔥 2. ServiceAccount (필수)
+    # ------------------------------------------------------
+    - name: Deploy audit-query-api ServiceAccount
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ audit_namespace }}"
+        src: "{{ audit_query_api_k8s_dir }}/serviceaccount.yml"
+
+    # ------------------------------------------------------
+    # 3. 기존 Deployment 제거
+    # ------------------------------------------------------
+    - name: Remove existing audit-query-api Deployment if exists
+      kubernetes.core.k8s:
+        state: absent
+        api_version: apps/v1
+        kind: Deployment
+        name: audit-query-api
+        namespace: "{{ audit_namespace }}"
+      ignore_errors: true
+
+    # ------------------------------------------------------
+    # 4. Pod 완전 종료 대기
+    # ------------------------------------------------------
+    - name: Wait for audit-query-api pods to terminate
+      kubernetes.core.k8s_info:
+        kind: Pod
+        namespace: "{{ audit_namespace }}"
+        label_selectors:
+          - "app=audit-query-api"
+      register: audit_query_api_pods
+      until: audit_query_api_pods.resources | length == 0
+      retries: 20
+      delay: 3
+
+    # ------------------------------------------------------
+    # 5. Secret
+    # ------------------------------------------------------
+    - name: Deploy audit-query-api Secret
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ audit_namespace }}"
+        src: "{{ audit_query_api_k8s_dir }}/secret.yml"
+
+    # ------------------------------------------------------
+    # 6. Deployment
+    # ------------------------------------------------------
+    - name: Deploy audit-query-api Deployment
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ audit_namespace }}"
+        definition: "{{ lookup('template', audit_query_api_k8s_dir ~ '/deployment.yml') | from_yaml }}"
+
+    # ------------------------------------------------------
+    # 7. Service
+    # ------------------------------------------------------
+    - name: Deploy audit-query-api Service
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ audit_namespace }}"
+        definition: "{{ lookup('template', audit_query_api_k8s_dir ~ '/service.yml') | from_yaml }}"
+
+    # ------------------------------------------------------
+    # 8. Pod Ready 대기
+    # ------------------------------------------------------
+    - name: Wait for audit-query-api pod to become Ready
+      kubernetes.core.k8s_info:
+        kind: Pod
+        namespace: "{{ audit_namespace }}"
+        label_selectors:
+          - "app=audit-query-api"
+      register: audit_query_api_ready
+      until:
+        - audit_query_api_ready.resources | length > 0
+        - audit_query_api_ready.resources[0].status.containerStatuses is defined
+        - audit_query_api_ready.resources[0].status.containerStatuses[0].ready | default(false)
+      retries: 30
+      delay: 5
+

@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: PersistentVolume
+
+metadata:
+  name: "{{ nfs_pv_name }}"               # 예: csv-ingest-pv
+
+spec:
+  capacity:
+    storage: "{{ nfs_storage_size }}"     # 예: 10Gi (⚠️ 단위 필수)
+
+  accessModes:
+    - ReadWriteMany                       # NFS는 RWX 가능
+
+  persistentVolumeReclaimPolicy: Retain   # PVC 삭제돼도 데이터 유지
+
+  nfs:
+    server: "{{ nfs_server }}"            # 예: 192.168.223.128
+    path: "{{ nfs_pv_path }}"             # 예: /mnt/nfs
+

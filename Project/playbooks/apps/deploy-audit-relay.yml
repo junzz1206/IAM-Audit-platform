@@ -1,0 +1,159 @@
+---
+# ==========================================================
+# Deploy Audit Relay Service
+#
+# 목적:
+# - PostgreSQL audit.audit_events 테이블을 읽어
+# - OpenSearch로 전달하는 audit-relay 서비스 배포
+#
+# 보장 사항:
+# - 기존 Deployment 완전 제거 후 재생성
+# - ReplicaSet / Pending Pod 잔존 문제 차단
+# ==========================================================
+
+- name: Deploy audit relay service
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    audit_relay_k8s_dir: "{{ playbook_dir }}/../../roles/audit-relay/k8s"
+
+  tasks:
+
+    # ------------------------------------------------------
+    # 1. Namespace 보장
+    # ------------------------------------------------------
+    - name: Ensure application namespace exists
+      kubernetes.core.k8s:
+        api_version: v1
+        kind: Namespace
+        name: "{{ apps_namespace }}"
+        state: present
+
+    # ------------------------------------------------------
+    # 2. 기존 Deployment 제거
+    # ------------------------------------------------------
+    - name: Remove existing audit-relay Deployment if exists
+      kubernetes.core.k8s:
+        state: absent
+        api_version: apps/v1
+        kind: Deployment
+        name: audit-relay
+        namespace: "{{ apps_namespace }}"
+      ignore_errors: true
+
+    # ------------------------------------------------------
+    # 3. Pods 완전 종료 대기
+    # ------------------------------------------------------
+    - name: Wait for audit-relay pods to terminate
+      kubernetes.core.k8s_info:
+        kind: Pod
+        namespace: "{{ apps_namespace }}"
+        label_selectors:
+          - "app=audit-relay"
+      register: audit_relay_pods
+      until: audit_relay_pods.resources | length == 0
+      retries: 20
+      delay: 3
+
+    # ------------------------------------------------------
+    # 4. ServiceAccount 배포 (정적 리소스)
+    # ------------------------------------------------------
+    - name: Deploy audit-relay ServiceAccount
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ apps_namespace }}"
+        src: "{{ audit_relay_k8s_dir }}/serviceaccount.yml"
+
+    # ------------------------------------------------------
+    # 5. Secret 배포 (변수 필요 → definition)
+    # ------------------------------------------------------
+    - name: Deploy audit-relay Secret
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ apps_namespace }}"
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: audit-relay-secret
+          type: Opaque
+          stringData:
+            PG_USER: "{{ audit_pg_user }}"
+            PG_PASSWORD: "{{ audit_pg_password }}"
+            PG_DB: "{{ audit_pg_db }}"
+            PG_HOST: "{{ audit_pg_host }}"
+            PG_PORT: "{{ audit_pg_port | string }}"
+            OS_USER: "{{ audit_os_user }}"
+            OS_PASSWORD: "{{ audit_os_password }}"
+
+    # ------------------------------------------------------
+    # 6. Deployment 재생성 (변수 필요 → definition)
+    # ------------------------------------------------------
+    - name: Deploy audit-relay Deployment
+      kubernetes.core.k8s:
+        api_version: apps/v1
+        state: present
+        namespace: "{{ apps_namespace }}"
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: audit-relay
+            labels:
+              app: audit-relay
+          spec:
+            replicas: "{{ audit_relay_replicas}}"
+            strategy:
+              type: Recreate
+            selector:
+              matchLabels:
+                app: audit-relay
+            template:
+              metadata:
+                labels:
+                  app: audit-relay
+              spec:
+                serviceAccountName: audit-relay
+                containers:
+                  - name: audit-relay
+                    image: "{{ audit_relay_image }}"
+                    imagePullPolicy: IfNotPresent
+
+                    envFrom:
+                      - secretRef:
+                          name: audit-relay-secret
+
+                    env:
+                      - name: OS_HOST
+                        value: "{{ audit_os_host }}"
+                      - name: OS_PORT
+                        value: "{{ audit_os_port | string }}"
+                      - name: OS_INDEX
+                        value: "{{ audit_os_index }}"
+
+                    resources:
+                      requests:
+                        cpu: "100m"
+                        memory: "256Mi"
+                      limits:
+                        cpu: "500m"
+                        memory: "512Mi"
+
+    # ------------------------------------------------------
+    # 7. Pod Ready 대기
+    # ------------------------------------------------------
+    - name: Wait for audit-relay pod to become Ready
+      kubernetes.core.k8s_info:
+        kind: Pod
+        namespace: "{{ apps_namespace }}"
+        label_selectors:
+          - "app=audit-relay"
+      register: audit_relay_ready
+      until:
+        - audit_relay_ready.resources | length > 0
+        - audit_relay_ready.resources[0].status.containerStatuses is defined
+        - audit_relay_ready.resources[0].status.containerStatuses[0].ready | default(false)
+      retries: 30
+      delay: 5
+
