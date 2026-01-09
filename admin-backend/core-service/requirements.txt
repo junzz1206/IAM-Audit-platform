@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+sqlalchemy
+psycopg2-binary
+redis
+pydantic-settings
+python-dotenv
+python-multipart
+pandas
+kubernetes
+requests
