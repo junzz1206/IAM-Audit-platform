@@ -13,31 +13,7 @@
 # - Role 단위 책임 분리 유지
 # ==========================================================
 
-# ==========================================================
-# -0.5. Bootstrap (최초 실행 환경 준비)
-# ==========================================================
-- name: Bootstrap build environment
-  hosts: all
-  become: true
-  gather_facts: false
-  roles:
-    - bootstrap
 
-# ==========================================================
-# Bootstrap Playbooks (조건부 실행은 각 playbook 안에서 처리)
-# ==========================================================
-
-# 0. Ansible 설치
-- import_playbook: bootstrap/install-ansible.yml
-
-# 1. Kubernetes 설치
-- import_playbook: bootstrap/install-k8s.yml
-
-# 2. Java + Spring Boot 설치
-- import_playbook: bootstrap/install-java.yml
-
-# 3. Gradle 8.5 설치
-- import_playbook: bootstrap/gradle-bootstrap.yml
 
 # ==========================================================
 # -1. Sync Source Code (Local → Server)
