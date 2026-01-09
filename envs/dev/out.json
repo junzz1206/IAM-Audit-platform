@@ -1,0 +1,1 @@
+{"status": "ok", "eip_allocation_id": "eipalloc-065b7121d4966e17a", "route_table_id": "rtb-02307e0fb92fa5b99", "dest_cidr": "192.168.1.0/24", "standby_eni_id": "eni-0e79fac1c8b32bf84"}
