@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  # 1. Redis (데이터 저장소) - 도커가 알아서 설치하고 실행해줌
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+
+  # 2. Core Service (금융) - 8000번 포트
+  core-service:
+    build: ./core-service
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_HOST=redis
+      - DB_HOST=192.168.1.151
+    depends_on:
+      - redis
+
+  # 3. Auth Service (인증) - 8001번 포트 (내부 8000 -> 외부 8001 연결)
+  auth-service:
+    build: ./auth-service
+    ports:
+      - "8001:8000"
+    environment:
+      - REDIS_HOST=redis
+      - DB_HOST=192.168.1.151
+    depends_on:
+      - redis
+
+  # 4. Audit Service (감사) - 8002번 포트 (내부 8000 -> 외부 8002 연결)
+  audit-service:
+    build: ./audit-service
+    ports:
+      - "8002:8000"
+    environment:
+      - REDIS_HOST=redis
+      - DB_HOST=192.168.1.151
+    depends_on:
+      - redis
