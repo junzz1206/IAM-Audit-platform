@@ -8,7 +8,7 @@ import {
 // 차트 라이브러리 (재무팀용)
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
 
-// 아이콘들 (카드 및 퀵메뉴용)
+// 아이콘들
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import StorageIcon from '@mui/icons-material/Storage';
 import RouterIcon from '@mui/icons-material/Router';
@@ -19,7 +19,7 @@ import ErrorIcon from '@mui/icons-material/Error';
 
 import { coreApi } from '../api/axios';
 
-// ------------------- [공통] 카드 컴포넌트 -------------------
+// ------------------- [공통] 카드 컴포넌트 (해빈이 코드 그대로!) -------------------
 function StatCard({ title, value, subText, statusColor, icon, onClick }) {
   return (
     <Card 
@@ -53,11 +53,16 @@ function StatCard({ title, value, subText, statusColor, icon, onClick }) {
 
 function Dashboard() {
   const [loading, setLoading] = useState(true);
+  // 로컬 스토리지 키도 혹시 몰라 snake_case 대응 (role -> role_name 등) 하지만 로컬스토리지라 기존 유지
   const userRole = localStorage.getItem('userRole') || 'GUEST';
 
   // 상태 관리
   const [financeStats, setFinanceStats] = useState({
-    today_visitors: 0, violation_count: 0, system_status: 'LOADING', daily_violations: [], dept_violations: []
+    total_transactions: 0,  // ERD: card_transactions_raw 관련
+    violation_count: 0,     // ERD: violation_results 관련
+    system_status: 'LOADING', 
+    daily_violations: [], 
+    department_stats: []    // 기존 dept_violations -> department_stats 이름 통일
   });
   const [infraStats, setInfraStats] = useState(null);
 
@@ -65,15 +70,16 @@ function Dashboard() {
     const fetchData = async () => {
       try {
         if (userRole === 'INFRA') {
+          // 인프라팀 데이터 호출
           const res = await coreApi.get('/dashboard/infra');
           setInfraStats(res.data);
         } else {
-          const res = await coreApi.get('/stats');
+          // 재무팀 데이터 호출
+          const res = await coreApi.get('/dashboard/stats'); // /stats -> /dashboard/stats 로 통일 권장
           setFinanceStats(res.data);
         }
       } catch (error) {
         console.error("데이터 로딩 실패:", error);
-        // 에러 방지용 빈 객체 주입
         if (userRole === 'INFRA') setInfraStats({});
       } finally {
         setLoading(false);
@@ -82,16 +88,14 @@ function Dashboard() {
     fetchData();
   }, [userRole]);
 
-  // 폰트 스타일
   const commonFont = { fontFamily: '"Noto Sans KR", sans-serif' };
 
   if (loading) return <Box display="flex" justifyContent="center" p={10}><CircularProgress /></Box>;
 
   // =========================================================================
-  // 🛡️ [View 1] 인프라팀 전용 화면
+  // 🛡️ [View 1] 인프라팀 전용 화면 (해빈이 기능 100% 유지)
   // =========================================================================
   if (userRole === 'INFRA' && infraStats) {
-    // 데이터 없으면 기본값(연결 실패 등) 세팅
     const status_summary = infraStats.status_summary || {
         alert: { critical: "연결 실패", warning: 0 },
         eks: { nodes_ready: "연결 실패", pods_crash: 0 },
@@ -99,7 +103,8 @@ function Dashboard() {
         db: { usage_percent: "연결 실패", blocked: false }
     };
     
-    const recent_events = infraStats.recent_events || [];
+    // ERD audit_events 테이블 구조와 매칭되도록 변수명 확인
+    const recent_events = infraStats.recent_events || []; 
     
     const quick_links = infraStats.quick_links || {
         grafana_cluster: "#", grafana_db: "#", hubble: "#", 
@@ -229,7 +234,7 @@ function Dashboard() {
   }
 
   // =========================================================================
-  // 💰 [View 2] 재무팀 전용 화면
+  // 💰 [View 2] 재무팀 전용 화면 (성민님 ERD 변수명 매칭 완료)
   // =========================================================================
   return (
     <Box sx={commonFont}>
@@ -239,10 +244,20 @@ function Dashboard() {
 
       <Grid container spacing={3} mb={5}>
         <Grid item xs={12} md={4}>
-          <StatCard title="전체 거래 건수" value={`${financeStats.total_transactions || 0}건`} statusColor="#1565c0" /> 
+          <StatCard 
+            title="전체 거래 건수" 
+            // ERD: card_transactions_raw 테이블의 카운트 (snake_case)
+            value={`${financeStats.total_transactions || 0}건`} 
+            statusColor="#1565c0" 
+          /> 
         </Grid>
         <Grid item xs={12} md={4}>
-          <StatCard title="규정 위반 건수" value={`${financeStats.violation_count || 0}건`} statusColor="#c62828" />
+          <StatCard 
+            title="규정 위반 건수" 
+            // ERD: violation_results 테이블의 카운트 (snake_case)
+            value={`${financeStats.violation_count || 0}건`} 
+            statusColor="#c62828" 
+          />
         </Grid>
         <Grid item xs={12} md={4}>
           <StatCard 
@@ -255,6 +270,7 @@ function Dashboard() {
       </Grid>
 
       <Grid container spacing={3}>
+        {/* 최근 7일 규정 위반 차트 */}
         <Grid item xs={12} md={6}>
           <Typography variant="h6" gutterBottom fontWeight="bold" sx={commonFont}>🚨 최근 7일 규정 위반</Typography>
           <Paper sx={{ p: 3, borderRadius: 3, height: 350, minWidth: 500, boxShadow: 3 }} elevation={0}>
@@ -272,10 +288,12 @@ function Dashboard() {
           </Paper>
         </Grid>
 
+        {/* 부서별 위반 현황 차트 */}
         <Grid item xs={12} md={6}>
           <Typography variant="h6" gutterBottom fontWeight="bold" sx={commonFont}>🏢 부서별 위반 현황</Typography>
           <Paper sx={{ p: 3, borderRadius: 3, height: 350, minWidth: 500, boxShadow: 3 }} elevation={0}>
             <ResponsiveContainer width="100%" height="100%">
+              {/* 기존 dept_violations -> department_stats 로 데이터 이름 변경 반영 */}
               <BarChart data={financeStats.department_stats || []} margin={{ top: 20, right: 20, left: 20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="name" interval={0} padding={{ left: 20, right: 20 }} />
