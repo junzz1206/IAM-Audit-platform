@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: audit-relay
+  namespace: onprem-audit
+  labels:
+    app: audit-relay
+
+spec:
+  replicas: 1
+
+  strategy:
+    type: Recreate
+
+  selector:
+    matchLabels:
+      app: audit-relay
+
+  template:
+    metadata:
+      labels:
+        app: audit-relay
+
+    spec:
+      # --------------------------------------------------
+      # ServiceAccount (이미 OK)
+      # --------------------------------------------------
+      serviceAccountName: audit-relay
+
+      # --------------------------------------------------
+      # 🔥 PSA restricted 통과용 securityContext (필수)
+      # --------------------------------------------------
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: audit-relay
+          image: localhost/audit-relay:0.1.0-onprem
+          imagePullPolicy: IfNotPresent
+
+          envFrom:
+            - configMapRef:
+                name: audit-relay-config
+            - secretRef:
+                name: audit-relay-secret
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+

@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: audit-reader
+  namespace: onprem-audit
+  labels:
+    app: audit-reader
+
+spec:
+  replicas: 1
+
+  strategy:
+    type: Recreate
+
+  selector:
+    matchLabels:
+      app: audit-reader
+
+  template:
+    metadata:
+      labels:
+        app: audit-reader
+
+    spec:
+      serviceAccountName: audit-reader
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: audit-reader
+          image: localhost/audit-reader:0.1.0-onprem
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - containerPort: 8080
+
+          envFrom:
+            - configMapRef:
+                name: audit-common-config
+            - secretRef:
+                name: audit-common-secret
+            - configMapRef:
+                name: audit-reader-config
+
+          # --------------------------------------------------
+          # 🔥 Kubernetes Probes (필수)
+          # --------------------------------------------------
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+

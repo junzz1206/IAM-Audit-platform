@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: audit-common-config
+  namespace: onprem-audit
+data:
+  # --------------------------------------------------
+  # Spring
+  # --------------------------------------------------
+  SPRING_PROFILES_ACTIVE: "onprem"
+  SERVER_PORT: "8080"
+
+  # --------------------------------------------------
+  # Datasource (🔥 필수)
+  # --------------------------------------------------
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres.onprem-db.svc.cluster.local:5432/audit_db"
+  SPRING_DATASOURCE_USERNAME: "audit"
+  SPRING_DATASOURCE_DRIVER_CLASS_NAME: "org.postgresql.Driver"
+
+  # --------------------------------------------------
+  # JPA / Hibernate
+  # --------------------------------------------------
+  SPRING_JPA_HIBERNATE_DDL_AUTO: "validate"
+  SPRING_JPA_DATABASE_PLATFORM: "org.hibernate.dialect.PostgreSQLDialect"
+
+  # --------------------------------------------------
+  # Audit DB schema/table
+  # --------------------------------------------------
+  DB_AUDIT_SCHEMA: "audit"
+  DB_AUDIT_TABLE: "audit_events"
+
+  # --------------------------------------------------
+  # Timezone
+  # --------------------------------------------------
+  TZ: "Asia/Seoul"
+

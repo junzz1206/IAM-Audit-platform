@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ingest-service-config
+  namespace: onprem-apps
+
+data:
+  SPRING_PROFILES_ACTIVE: onprem
+  SPRING_DATASOURCE_URL: jdbc:postgresql://192.168.1.151:5432/finance_db
+  SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+  SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
+  SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+  TZ: Asia/Seoul
+

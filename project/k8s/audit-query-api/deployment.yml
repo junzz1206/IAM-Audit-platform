@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: audit-query-api
+  namespace: onprem-audit
+  labels:
+    app: audit-query-api
+
+spec:
+  replicas: 1
+
+  strategy:
+    type: Recreate
+
+  selector:
+    matchLabels:
+      app: audit-query-api
+
+  template:
+    metadata:
+      labels:
+        app: audit-query-api
+
+    spec:
+      serviceAccountName: audit-query-api
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: audit-query-api
+          image: localhost/audit-query-api:0.1.0-onprem
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - containerPort: 8080
+
+          env:
+            # --------------------------------------------------
+            # Spring Profile
+            # --------------------------------------------------
+            - name: SPRING_PROFILES_ACTIVE
+              value: "onprem"
+
+            # --------------------------------------------------
+            # 🔥 핵심: DataSource / JPA 자동 설정 차단
+            # --------------------------------------------------
+            - name: SPRING_AUTOCONFIGURE_EXCLUDE
+              value: >
+                org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,
+                org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+
+            # --------------------------------------------------
+            # API 서비스 포트
+            # --------------------------------------------------
+            - name: SERVICE_PORT
+              value: "8080"
+
+            # --------------------------------------------------
+            # audit-reader 내부 접근 URL
+            # --------------------------------------------------
+            - name: AUDIT_READER_URL
+              value: "http://audit-reader.onprem-audit.svc.cluster.local:8080"
+
+            # --------------------------------------------------
+            # IAM 토큰 검증 URL
+            # --------------------------------------------------
+            - name: IAM_VALIDATE_URL
+              value: "http://iam-service.onprem-iam.svc.cluster.local:8080/validate"
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+

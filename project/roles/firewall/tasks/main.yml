@@ -1,0 +1,23 @@
+---
+# ==========================================================
+# Firewall Role Entry Point
+# ==========================================================
+# - firewalld 설치
+# - 기본 정책 DROP
+# - 세부 규칙은 rules.yml에서 관리
+# ==========================================================
+
+- name: Install firewalld
+  ansible.builtin.yum:
+    name: firewalld
+    state: present
+
+- name: Enable and start firewalld
+  ansible.builtin.systemd:
+    name: firewalld
+    enabled: true
+    state: started
+
+- name: Apply zero-trust firewall rules
+  ansible.builtin.import_tasks: rules.yml
+

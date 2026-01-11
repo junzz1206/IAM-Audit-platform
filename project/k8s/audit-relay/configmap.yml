@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: audit-relay-config
+  namespace: onprem-audit
+data:
+  SPRING_PROFILES_ACTIVE: "onprem"
+
+  SPRING_AUTOCONFIGURE_EXCLUDE: >
+    org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,
+    org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+
+  TZ: "Asia/Seoul"
+

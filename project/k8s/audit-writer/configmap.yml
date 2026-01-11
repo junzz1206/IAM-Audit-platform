@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+
+metadata:
+  name: audit-writer-config
+  namespace: "onprem-apps"
+  labels:
+    app: audit-writer
+
+data:
+  # --------------------------------------------------
+  # Audit DB Schema / Table
+  # --------------------------------------------------
+  DB_AUDIT_SCHEMA: "audit"
+  DB_AUDIT_TABLE: "audit_events"
+
+  # --------------------------------------------------
+  # Runtime Mode
+  # --------------------------------------------------
+  AUDIT_WRITER_MODE: "append-only"
+

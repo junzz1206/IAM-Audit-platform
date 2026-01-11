@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: postgres-exporter
+  namespace: onprem-monitoring
+  labels:
+    app: postgres-exporter
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: postgres-exporter
+
+  template:
+    metadata:
+      labels:
+        app: postgres-exporter
+
+    spec:
+      # --------------------------------------------------
+      # PSA restricted 통과용 securityContext
+      # --------------------------------------------------
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      # --------------------------------------------------
+      # ServiceAccount (없으면 default 사용)
+      # --------------------------------------------------
+      serviceAccountName: postgres-exporter
+
+      containers:
+        - name: postgres-exporter
+          image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: metrics
+              containerPort: 9187
+              protocol: TCP
+
+          # --------------------------------------------------
+          # 환경 변수
+          # 반드시 Secret에 DATA_SOURCE_NAME 존재해야 함
+          # --------------------------------------------------
+          envFrom:
+            - secretRef:
+                name: postgres-exporter-secret
+
+          args:
+            - "--web.listen-address=:9187"
+
+          # --------------------------------------------------
+          # (선택) 커스텀 쿼리 없으면 제거 가능
+          # --------------------------------------------------
+          # volumeMounts:
+          #   - name: queries
+          #     mountPath: /etc/postgres-exporter
+          #     readOnly: true
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "300m"
+              memory: "256Mi"
+
+      # volumes:
+      #   - name: queries
+      #     configMap:
+      #       name: postgres-exporter-queries
+

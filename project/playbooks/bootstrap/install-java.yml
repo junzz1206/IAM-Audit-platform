@@ -1,0 +1,59 @@
+---
+# playbooks/bootstrap/install-java.yml
+# ==========================================================
+# Install Java (OpenJDK 17) for Spring Boot
+# - Kubernetes repo가 등록돼 있어도 영향을 받지 않도록 차단
+# ==========================================================
+
+- name: Install OpenJDK 17
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    # ------------------------------------------------------
+    # 1. OpenJDK 17 설치 (kubernetes repo 비활성화)
+    # ------------------------------------------------------
+    - name: Ensure OpenJDK 17 is installed
+      ansible.builtin.dnf:
+        name:
+          - java-17-openjdk
+          - java-17-openjdk-devel
+        state: present
+        disablerepo: kubernetes
+
+    # ------------------------------------------------------
+    # 2. JAVA_HOME 설정
+    # ------------------------------------------------------
+    - name: Ensure JAVA_HOME environment variable is set
+      ansible.builtin.lineinfile:
+        path: /etc/profile.d/java.sh
+        line: 'export JAVA_HOME=/usr/lib/jvm/java-17-openjdk'
+        create: yes
+        state: present
+        mode: '0644'
+
+    # ------------------------------------------------------
+    # 3. PATH에 JAVA_HOME/bin 추가
+    # ------------------------------------------------------
+    - name: Ensure JAVA_HOME bin is in PATH
+      ansible.builtin.lineinfile:
+        path: /etc/profile.d/java.sh
+        line: 'export PATH=$JAVA_HOME/bin:$PATH'
+        create: yes
+        state: present
+        mode: '0644'
+
+    # ------------------------------------------------------
+    # 4. Java 설치 확인 (로그용)
+    # ------------------------------------------------------
+    - name: Verify Java installation
+      ansible.builtin.command: java -version
+      register: java_version
+      changed_when: false
+      ignore_errors: false
+
+    - name: Show Java version
+      ansible.builtin.debug:
+        var: java_version.stderr
+

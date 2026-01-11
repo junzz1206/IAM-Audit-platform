@@ -1,0 +1,25 @@
+# --------------------------------------------------
+# PostgreSQL Exporter Service
+# - Prometheus scrape 엔드포인트 제공
+# --------------------------------------------------
+
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: postgres-exporter
+  namespace: onprem-monitoring
+  labels:
+    app: postgres-exporter
+
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres-exporter
+
+  ports:
+    - name: metrics
+      port: 9187
+      targetPort: 9187
+      protocol: TCP
+

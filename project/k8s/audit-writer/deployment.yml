@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: audit-writer
+  namespace: "onprem-apps"
+  labels:
+    app: audit-writer
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: audit-writer
+
+  template:
+    metadata:
+      labels:
+        app: audit-writer
+
+    spec:
+      containers:
+        - name: audit-writer
+          image: "localhost/audit-writer:0.1.0-onprem"
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - containerPort: 8080
+
+          env:
+            - name: DB_HOST
+              value: "192.168.1.151"
+
+            - name: DB_PORT
+              value: "5432"
+
+            - name: DB_NAME
+              value: "onprem_finance_db"
+
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: "audit-writer-db-secret"
+                  key: username
+
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "audit-writer-db-secret"
+                  key: password
+
+            - name: DB_AUDIT_SCHEMA
+              value: "audit"
+
+            - name: DB_AUDIT_TABLE
+              value: "audit_events"
+
+            - name: AUDIT_MODE
+              value: "append-only"
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+

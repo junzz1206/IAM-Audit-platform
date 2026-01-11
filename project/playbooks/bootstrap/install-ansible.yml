@@ -1,0 +1,38 @@
+---
+- name: Install Ansible (AWS RHEL safe)
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    # ------------------------------------------------------
+    # 1. EPEL은 AWS RHEL에서 사용 안 함
+    # ------------------------------------------------------
+    - name: Skip EPEL install on AWS RHEL
+      ansible.builtin.debug:
+        msg: "Skipping EPEL install (AWS RHEL is not subscription-registered)"
+      when: ansible_distribution == "RedHat"
+
+
+    # ------------------------------------------------------
+    # 2. Ansible Core 설치 (RHEL 기본 repo)
+    # ------------------------------------------------------
+    - name: Install ansible-core
+      ansible.builtin.dnf:
+        name: ansible-core
+        state: present
+
+
+    # ------------------------------------------------------
+    # 3. Ansible 버전 확인
+    # ------------------------------------------------------
+    - name: Verify Ansible version
+      ansible.builtin.command: ansible --version
+      register: ansible_ver
+      changed_when: false
+
+
+    - name: Show Ansible version
+      ansible.builtin.debug:
+        msg: "{{ ansible_ver.stdout_lines }}"
+

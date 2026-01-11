@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: audit-reader-config
+  namespace: onprem-audit
+data:
+  # --------------------------------------------------
+  # Server
+  # --------------------------------------------------
+  SERVICE_PORT: "8080"
+
+  # --------------------------------------------------
+  # Audit Reader Logic
+  # --------------------------------------------------
+  AUDIT_QUERY_LIMIT: "1000"
+  AUDIT_VIOLATION_ONLY: "true"
+  AUDIT_MIN_SEVERITY: "MEDIUM"
+
+  # --------------------------------------------------
+  # OpenSearch
+  # --------------------------------------------------
+  OPENSEARCH_TIMEOUT_MS: "3000"
+
+  # --------------------------------------------------
+  # Spring Boot Actuator (🔥 필수)
+  # --------------------------------------------------
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info"
+  MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
+

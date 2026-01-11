@@ -1,0 +1,139 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: iam-service
+  namespace: onprem-iam
+  labels:
+    app: iam-service
+
+spec:
+  replicas: 1
+
+  strategy:
+    type: Recreate
+
+  selector:
+    matchLabels:
+      app: iam-service
+
+  template:
+    metadata:
+      labels:
+        app: iam-service
+
+    spec:
+      terminationGracePeriodSeconds: 30
+
+      containers:
+        - name: iam-service
+          image: localhost/iam-service:0.1.0-onprem
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              containerPort: 8080
+
+          env:
+            # --------------------------------------------------
+            # Spring profile
+            # --------------------------------------------------
+            - name: SPRING_PROFILES_ACTIVE
+              value: onprem
+
+            - name: SERVER_PORT
+              value: "8080"
+
+            # --------------------------------------------------
+            # Datasource (IAM DB)
+            # --------------------------------------------------
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://192.168.1.151:5432/iam_db
+
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: iam-db-secret
+                  key: DB_USER
+
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: iam-db-secret
+                  key: DB_PASSWORD
+
+            - name: SPRING_DATASOURCE_DRIVER_CLASS_NAME
+              value: org.postgresql.Driver
+
+            # --------------------------------------------------
+            # JPA / Hibernate
+            # --------------------------------------------------
+            - name: SPRING_JPA_DATABASE_PLATFORM
+              value: org.hibernate.dialect.PostgreSQLDialect
+
+            - name: SPRING_JPA_HIBERNATE_DDL_AUTO
+              value: validate
+
+            # --------------------------------------------------
+            # IAM domain config
+            # --------------------------------------------------
+            - name: DB_IAM_SCHEMA
+              value: iam
+            - name: DB_USERS_TABLE
+              value: users
+            - name: DB_CREDENTIALS_TABLE
+              value: credentials
+            - name: DB_ROLES_TABLE
+              value: roles
+            - name: DB_USER_ROLE_TABLE
+              value: user_role
+
+            # --------------------------------------------------
+            # Audit
+            # --------------------------------------------------
+            - name: DB_AUDIT_SCHEMA
+              value: audit
+            - name: DB_AUDIT_TABLE
+              value: audit_events
+            - name: AUDIT_MODE
+              value: append-only
+
+            - name: TZ
+              value: Asia/Seoul
+
+          # --------------------------------------------------
+          # Probes (🔥 핵심 수정)
+          # --------------------------------------------------
+          startupProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            failureThreshold: 60
+
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 180
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+

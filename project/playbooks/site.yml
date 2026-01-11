@@ -1,0 +1,54 @@
+---
+# ==========================================================
+# site.yml
+#
+# Purpose:
+# - On-Premise 서버 OS / 노드 준비 전용
+# - Kubernetes / Monitoring / Application 배포는
+#   run-all.k8s.sh + kubectl 로 분리
+#
+# Design Principles:
+# - Ansible = OS 레벨만 담당
+# - Kubernetes 리소스에는 절대 관여하지 않음
+# ==========================================================
+
+# ----------------------------------------------------------
+# 0. Bootstrap (필수)
+# - 기본 패키지
+# - 계정 / 디렉터리
+# - 공통 OS 설정
+# ----------------------------------------------------------
+- name: Bootstrap build environment
+  hosts: all
+  become: true
+  gather_facts: false
+  roles:
+    - bootstrap
+
+
+# ----------------------------------------------------------
+# 1. Firewall (선택)
+# ----------------------------------------------------------
+- name: Configure firewall (best effort)
+  hosts: all
+  become: true
+  gather_facts: false
+  roles:
+    - firewall
+  ignore_errors: true
+
+
+# ----------------------------------------------------------
+# 2. NFS OS-level setup (선택)
+# - export 설정, mount 준비 등
+# - PV/PVC는 kubectl에서 처리
+# ----------------------------------------------------------
+- name: Configure NFS server/client (OS only)
+  hosts: k8s_control_plane
+  become: true
+  gather_facts: false
+  roles:
+    - nfs
+  when: nfs_enabled | bool
+  ignore_errors: true
+

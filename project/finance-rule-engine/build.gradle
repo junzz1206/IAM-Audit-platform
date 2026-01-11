@@ -1,0 +1,43 @@
+plugins {
+    id 'org.springframework.boot' version '3.2.1'
+    id 'io.spring.dependency-management' version '1.1.4'
+    id 'java'
+}
+
+group = 'com.onprem'
+version = '0.1.0-onprem'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+springBoot {
+    mainClass = 'com.onprem.finance.FinanceRuleEngineApplication'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Web (Tomcat 포함)
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+
+    // JDBC + HikariCP
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+
+    // ✅ Actuator (이게 핵심)
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    // PostgreSQL Driver
+    implementation 'org.postgresql:postgresql'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+

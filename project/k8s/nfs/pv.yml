@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: csv-ingest-pv
+
+spec:
+  capacity:
+    storage: 10Gi
+
+  accessModes:
+    - ReadWriteMany
+
+  persistentVolumeReclaimPolicy: Retain
+
+  storageClassName: ""
+
+  nfs:
+    server: 192.168.1.151
+    path: /mnt/nfs
+

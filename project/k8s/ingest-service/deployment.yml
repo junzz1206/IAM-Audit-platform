@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: ingest-service
+  namespace: onprem-apps
+  labels:
+    app: ingest-service
+
+spec:
+  replicas: 1
+
+  strategy:
+    type: Recreate
+
+  selector:
+    matchLabels:
+      app: ingest-service
+
+  template:
+    metadata:
+      labels:
+        app: ingest-service
+
+    spec:
+      terminationGracePeriodSeconds: 30
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+
+      containers:
+        - name: ingest-service
+          image: localhost/ingest-service:0.1.0-onprem
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              containerPort: 8080
+
+          env:
+            # --------------------------------------------------
+            # Spring profile
+            # --------------------------------------------------
+            - name: SPRING_PROFILES_ACTIVE
+              value: onprem
+
+            # --------------------------------------------------
+            # 🔥 핵심: JVM 종료 방지 (ingest keep-alive)
+            # --------------------------------------------------
+            - name: SPRING_MAIN_KEEP_ALIVE
+              value: "true"
+
+            # --------------------------------------------------
+            # Datasource (PostgreSQL - finance_db)
+            # --------------------------------------------------
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://192.168.1.151:5432/finance_db
+
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: finance-engine-db-secret
+                  key: DB_USER
+
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: finance-engine-db-secret
+                  key: DB_PASSWORD
+
+            - name: SPRING_DATASOURCE_DRIVER_CLASS_NAME
+              value: org.postgresql.Driver
+
+            # --------------------------------------------------
+            # JPA / Hibernate
+            # --------------------------------------------------
+            - name: SPRING_JPA_DATABASE_PLATFORM
+              value: org.hibernate.dialect.PostgreSQLDialect
+
+            - name: SPRING_JPA_HIBERNATE_DDL_AUTO
+              value: validate
+
+            # --------------------------------------------------
+            # Application-specific
+            # --------------------------------------------------
+            - name: TZ
+              value: Asia/Seoul
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+

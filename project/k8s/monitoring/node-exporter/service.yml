@@ -1,0 +1,25 @@
+# --------------------------------------------------
+# Node Exporter Service
+# - Prometheus가 접근할 엔드포인트 제공
+# --------------------------------------------------
+
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: node-exporter
+  namespace: onprem-monitoring
+  labels:
+    app: node-exporter
+
+spec:
+  type: ClusterIP
+  selector:
+    app: node-exporter
+
+  ports:
+    - name: metrics
+      port: 9100
+      targetPort: 9100
+      protocol: TCP
+

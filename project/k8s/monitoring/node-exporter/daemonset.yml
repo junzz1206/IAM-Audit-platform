@@ -1,0 +1,87 @@
+# --------------------------------------------------
+# Node Exporter DaemonSet
+# --------------------------------------------------
+
+apiVersion: apps/v1
+kind: DaemonSet
+
+metadata:
+  name: node-exporter
+  namespace: onprem-monitoring
+  labels:
+    app: node-exporter
+
+spec:
+  selector:
+    matchLabels:
+      app: node-exporter
+
+  template:
+    metadata:
+      labels:
+        app: node-exporter
+
+    spec:
+      # --------------------------------------------------
+      # Host 접근 (필수)
+      # --------------------------------------------------
+      hostNetwork: true
+      hostPID: true
+
+      # control-plane 포함 모든 노드에 배포
+      tolerations:
+        - operator: "Exists"
+
+      # --------------------------------------------------
+      # Security Context
+      # --------------------------------------------------
+      securityContext:
+        runAsUser: 0
+
+      containers:
+        - name: node-exporter
+          image: prom/node-exporter:v1.7.0
+          imagePullPolicy: IfNotPresent
+
+          args:
+            - "--path.procfs=/host/proc"
+            - "--path.sysfs=/host/sys"
+            - "--path.rootfs=/host/root"
+            - "--web.listen-address=:9100"
+
+          ports:
+            - name: metrics
+              containerPort: 9100
+              hostPort: 9100
+              protocol: TCP
+
+          volumeMounts:
+            - name: proc
+              mountPath: /host/proc
+              readOnly: true
+            - name: sys
+              mountPath: /host/sys
+              readOnly: true
+            - name: root
+              mountPath: /host/root
+              readOnly: true
+
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+
+      volumes:
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: root
+          hostPath:
+            path: /
+

@@ -1,0 +1,86 @@
+---
+# ==========================================================
+# NFS Role - OS Level Tasks
+#
+# 목적:
+# - NFS 서버 패키지 설치
+# - Export 디렉토리 생성
+# - /etc/exports 구성
+# - NFS 서비스 기동 및 export 반영
+#
+# 설계 원칙:
+# - NFS 서버 노드에서만 실행
+# - 멱등성 보장
+# - exports 변경 시에만 reload
+# ==========================================================
+
+
+# ----------------------------------------------------------
+# (0) NFS 서버에서만 실행되도록 제한
+# ----------------------------------------------------------
+- name: Ensure this role runs only on NFS server
+  ansible.builtin.assert:
+    that:
+      - inventory_hostname == k8s_node_host
+    fail_msg: >
+      NFS OS-level tasks must run on the NFS server node only.
+      Current host: {{ inventory_hostname }},
+      Expected NFS server: {{ k8s_node_host }}
+
+
+# ----------------------------------------------------------
+# (1) NFS 서버 패키지 설치
+#     Rocky / RHEL 계열 기준
+# ----------------------------------------------------------
+- name: Install NFS server packages
+  ansible.builtin.package:
+    name:
+      - nfs-utils
+    state: present
+
+
+# ----------------------------------------------------------
+# (2) NFS export 디렉토리 생성
+# ----------------------------------------------------------
+- name: Create NFS export directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.group | default('root') }}"
+    mode: "{{ item.mode | default('0755') }}"
+  loop: "{{ nfs_exports }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+
+# ----------------------------------------------------------
+# (3) /etc/exports 구성
+# ----------------------------------------------------------
+- name: Configure /etc/exports
+  ansible.builtin.template:
+    src: exports.j2
+    dest: /etc/exports
+    owner: root
+    group: root
+    mode: "0644"
+  register: exports_result
+
+
+# ----------------------------------------------------------
+# (4) NFS 서비스 enable + start 보장
+# ----------------------------------------------------------
+- name: Ensure NFS service is enabled and running
+  ansible.builtin.service:
+    name: nfs-server
+    enabled: true
+    state: started
+
+
+# ----------------------------------------------------------
+# (5) exportfs 반영 (exports 변경 시에만)
+# ----------------------------------------------------------
+- name: Reload NFS exports
+  ansible.builtin.command: exportfs -rav
+  when: exports_result.changed
+

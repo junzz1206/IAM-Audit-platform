@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: finance-rule-engine
+  namespace: onprem-apps
+  labels:
+    app: finance-rule-engine
+
+spec:
+  replicas: 1
+
+  strategy:
+    type: Recreate
+
+  selector:
+    matchLabels:
+      app: finance-rule-engine
+
+  template:
+    metadata:
+      labels:
+        app: finance-rule-engine
+
+    spec:
+      terminationGracePeriodSeconds: 30
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+
+      containers:
+        - name: finance-rule-engine
+          image: localhost/finance-rule-engine:0.1.0-onprem
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              containerPort: 8080
+
+          # 🔥 핵심 수정 부분
+          env:
+            # --------------------------------------------------
+            # Spring profile
+            # --------------------------------------------------
+            - name: SPRING_PROFILES_ACTIVE
+              value: onprem
+
+            # --------------------------------------------------
+            # Datasource (PostgreSQL)
+            # --------------------------------------------------
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://192.168.1.151:5432/finance_db
+
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: finance-engine-db-secret
+                  key: DB_USER
+
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: finance-engine-db-secret
+                  key: DB_PASSWORD
+
+            - name: SPRING_DATASOURCE_DRIVER_CLASS_NAME
+              value: org.postgresql.Driver
+
+            # --------------------------------------------------
+            # JPA / Hibernate
+            # --------------------------------------------------
+            - name: SPRING_JPA_DATABASE_PLATFORM
+              value: org.hibernate.dialect.PostgreSQLDialect
+
+            - name: SPRING_JPA_HIBERNATE_DDL_AUTO
+              value: validate
+
+            # --------------------------------------------------
+            # Timezone
+            # --------------------------------------------------
+            - name: TZ
+              value: Asia/Seoul
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+

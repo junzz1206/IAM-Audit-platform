@@ -1,0 +1,64 @@
+---
+# roles/bootstrap/tasks/main.yml
+# ==========================================================
+# Bootstrap: Java & build dependencies
+# - Kubernetes repo로 인한 dnf 실패 방지 (Rocky 9 안전 버전)
+# ==========================================================
+
+# ----------------------------------------------------------
+# 0. Ensure dnf config plugins are available
+# ----------------------------------------------------------
+- name: Ensure dnf plugins are installed
+  ansible.builtin.dnf:
+    name: dnf-plugins-core
+    state: present
+  ignore_errors: true
+
+
+# ----------------------------------------------------------
+# 1. Disable kubernetes repo explicitly (ini_file 제거)
+# ----------------------------------------------------------
+- name: Disable kubernetes repo if exists (safe fallback)
+  ansible.builtin.command: >
+    dnf config-manager --set-disabled kubernetes
+  changed_when: false
+  ignore_errors: true
+
+
+# ----------------------------------------------------------
+# 2. Java & build dependencies 설치
+# ----------------------------------------------------------
+- name: Install Java & build dependencies
+  ansible.builtin.dnf:
+    name:
+      - java-17-openjdk
+      - java-17-openjdk-devel
+      - git
+      - unzip
+    state: present
+    disablerepo: kubernetes
+
+
+# ----------------------------------------------------------
+# 3. JAVA_HOME 설정
+# ----------------------------------------------------------
+- name: Ensure JAVA_HOME environment variable is set
+  ansible.builtin.lineinfile:
+    path: /etc/profile.d/java.sh
+    line: 'export JAVA_HOME=/usr/lib/jvm/java-17-openjdk'
+    create: yes
+    state: present
+    mode: '0644'
+
+
+# ----------------------------------------------------------
+# 4. PATH에 JAVA_HOME/bin 추가
+# ----------------------------------------------------------
+- name: Ensure JAVA_HOME bin is in PATH
+  ansible.builtin.lineinfile:
+    path: /etc/profile.d/java.sh
+    line: 'export PATH=$JAVA_HOME/bin:$PATH'
+    create: yes
+    state: present
+    mode: '0644'
+
