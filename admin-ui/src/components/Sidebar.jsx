@@ -1,4 +1,3 @@
-// src/components/Sidebar.jsx
 import React from 'react';
 import { Drawer, List, ListItem, ListItemIcon, ListItemText, Toolbar, Divider, Box, Button, Typography } from '@mui/material';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -6,7 +5,7 @@ import SettingsInputComponentIcon from '@mui/icons-material/SettingsInputCompone
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import WarningIcon from '@mui/icons-material/Warning';
 import SecurityIcon from '@mui/icons-material/Security';
-import PolicyIcon from '@mui/icons-material/Policy'; // 정책 아이콘
+// PolicyIcon은 이제 안 쓰니까 지워도 돼!
 import LogoutIcon from '@mui/icons-material/Logout';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -68,11 +67,8 @@ function Sidebar() {
               <ListItemIcon><SecurityIcon /></ListItemIcon>
               <ListItemText primary="감사 로그" />
             </ListItem>
-            {/* 조장님이 말씀하신 (선택) 정책 관리 */}
-            <ListItem button>
-              <ListItemIcon><PolicyIcon /></ListItemIcon>
-              <ListItemText primary="정책 관리 (Cilium)" />
-            </ListItem>
+            
+            {/* 🗑️ [삭제됨] 정책 관리 (Cilium) 메뉴는 이제 없습니다! 아주 깔끔! */}
           </>
         )}
       </List>
