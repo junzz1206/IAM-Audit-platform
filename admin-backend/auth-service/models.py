@@ -1,45 +1,38 @@
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Boolean
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID
 from database import Base
-import datetime
 import uuid
 
+# 1. 사용자 정보 (iam.users) -> 🔢 Integer (숫자)
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = {"schema": "iam"}
 
-    user_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
-    email = Column(String)
-    status = Column(String, default="ACTIVE")
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    status = Column(String, default='ACTIVE')
 
-    credentials = relationship("Credential", back_populates="user")
-    user_roles = relationship("UserRole", back_populates="user")
-
+# 2. 비밀번호 (iam.credentials) -> 🔢 Integer (숫자)
 class Credential(Base):
     __tablename__ = "credentials"
+    __table_args__ = {"schema": "iam"}
 
-    credential_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String, ForeignKey("users.user_id"))
+    credential_id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("iam.users.user_id"))
     password_hash = Column(String)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow)
 
-    user = relationship("User", back_populates="credentials")
-
+# 3. 역할 정의 (iam.roles) -> 🔤 UUID (문자열)
 class Role(Base):
     __tablename__ = "roles"
+    __table_args__ = {"schema": "iam"}
 
-    role_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    role_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     role_name = Column(String, unique=True)
-    description = Column(String)
 
-    user_roles = relationship("UserRole", back_populates="role")
-
+# 4. 사용자와 역할 연결 (iam.user_role) -> 🍜 짬뽕 (숫자 + 문자열)
 class UserRole(Base):
     __tablename__ = "user_role"
+    __table_args__ = {"schema": "iam"}
 
-    user_id = Column(String, ForeignKey("users.user_id"), primary_key=True)
-    role_id = Column(String, ForeignKey("roles.role_id"), primary_key=True)
-
-    user = relationship("User", back_populates="user_roles")
-    role = relationship("Role", back_populates="user_roles")
+    user_id = Column(Integer, ForeignKey("iam.users.user_id"), primary_key=True)
+    role_id = Column(UUID(as_uuid=True), ForeignKey("iam.roles.role_id"), primary_key=True)
