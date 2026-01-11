@@ -1,64 +1,39 @@
 import os
-from typing import List
+from typing import List, Union
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    # --------------------------------------------------------
-    # 1. 기본 프로젝트 설정 (이건 보통 코드에 박아둠)
-    # --------------------------------------------------------
-    PROJECT_NAME: str = "Core Finance Service"
-    VERSION: str = "1.0.0"
-    DEBUG: bool = True
-    ALLOWED_ORIGINS: List[str] = ["*"]
+    # 1. 기본 설정
+    PROJECT_NAME: str
+    VERSION: str
+    DEBUG: bool
+    ALLOWED_ORIGINS: List[str]
 
-    # --------------------------------------------------------
-    # 2. 필수 인프라 (DB, Redis, Security) - 엄격 모드!
-    # --------------------------------------------------------
+    # 2. 데이터베이스 설정 (여기서 충돌 났었음!)
+    # 이제 .env에 있는 값들을 "변수"로 그대로 받기만 함 (가장 깔끔!)
     DB_HOST: str
     DB_PORT: int
     DB_USER: str
     DB_PASSWORD: str
     DB_NAME: str
+    
+    # [핵심 수정] 함수(@property)가 아니라 '변수'로 선언해야 .env 값을 읽어옴!
+    DATABASE_URL: str 
 
+    # 3. Redis 설정
     REDIS_HOST: str
     REDIS_PORT: int
     REDIS_DB: int
 
+    # 4. 보안 설정
     SECRET_KEY: str
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
 
-    # --------------------------------------------------------
-    # 3. [NEW] 인프라 모니터링 & 퀵 링크
-    # (.env 파일에 이 변수들이 없으면 에러가 납니다)
-    # --------------------------------------------------------
-    
-    # (1) Kubernetes
-    KUBE_CONFIG_PATH: str 
-
-    # (2) Prometheus
-    PROMETHEUS_URL: str
-
-    # (3) 실제 DB 모니터링용
-    REAL_DB_HOST: str
-    REAL_DB_PORT: int
-    REAL_DB_USER: str
-    REAL_DB_PASSWORD: str
-    REAL_DB_NAME: str
-
-    # (4) VPN 상태 체크
-    VPN_GATEWAY_IP: str
-
-    # (5) 퀵 메뉴 (Quick Links)
-    LINK_GRAFANA_CLUSTER: str
-    LINK_GRAFANA_DB: str
-    LINK_HUBBLE: str
-    LINK_LOKI: str
-    LINK_ARGOCD: str
-    LINK_RUNBOOK: str
-
     class Config:
         env_file = ".env"
+        env_file_encoding = 'utf-8'
+        # 혹시라도 .env에 모르는 변수가 있어도 에러 내지 말고 무시해라! (안전장치)
         extra = "ignore" 
 
 settings = Settings()
