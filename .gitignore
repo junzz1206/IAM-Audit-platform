@@ -18,3 +18,8 @@ gradle.zip
 # secrets
 *.pem
 *REAL*
+
+# build artifacts / images
+*.tar
+*.tar.gz
+*.tgz
