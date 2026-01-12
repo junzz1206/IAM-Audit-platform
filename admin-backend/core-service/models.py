@@ -16,7 +16,7 @@ class CardTransaction(Base):
     
     # 실제 DB: card_id (text), user_uuid (uuid)
     card_id = Column(String, nullable=False)
-    user_uuid = Column(UUID(as_uuid=True), nullable=False) # 🌟 user_id 아님!
+    user_uuid = Column(UUID(as_uuid=True), nullable=True)
     
     merchant = Column(String)
     amount = Column(Numeric) # 🌟 DB가 numeric임

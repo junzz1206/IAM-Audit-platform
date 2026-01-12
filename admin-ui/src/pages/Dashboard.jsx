@@ -4,17 +4,23 @@ import {
   Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
   Chip
 } from '@mui/material';
-// 🌟 가장 안전한 Grid 불러오기 방식
+// 🌟 Grid 불러오기
 import Grid from '@mui/material/Grid'; 
 
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+
+// 🌟 [추가됨] 인프라팀 디자인에 필요한 아이콘들 전부 추가!
+import DnsIcon from '@mui/icons-material/Dns';
+import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
+import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
 import StorageIcon from '@mui/icons-material/Storage';
 import RouterIcon from '@mui/icons-material/Router';
-import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import RuleIcon from '@mui/icons-material/Rule';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
+
 import { useNavigate } from 'react-router-dom';
 import { coreApi } from '../api/axios';
 
@@ -70,11 +76,9 @@ function Dashboard() {
           setInfraStats(res.data);
         } else {
           const res = await coreApi.get('/stats');
-          // 🌟 캡처에서 본 백엔드 이름표(total, violation) 매칭!
           setFinanceStats({
             total_transactions: res.data.total || 0,
             violation_count: res.data.violation || 0,
-            // 🌟 total이 있으면 'NORMAL'로 간주하여 점검 표시 해결!
             system_status: res.data.total > 0 ? 'NORMAL' : 'CHECK', 
             daily_violations: res.data.daily_violations || [],
             department_stats: res.data.department_stats || []
@@ -90,37 +94,41 @@ function Dashboard() {
   }, [userRole]);
 
   const commonFont = { fontFamily: '"Noto Sans KR", sans-serif' };
+  const titleStyle = { fontWeight: 'bold', color: '#333', display: 'flex', alignItems: 'center', gap: 1 };
+
   if (loading) return <Box display="flex" justifyContent="center" p={10}><CircularProgress /></Box>;
+
   // =========================================================================
-  // 🛡️ [View 1] 인프라팀 전용 화면
+  // 🛠️ [View 1] 인프라팀 전용 화면 (원하시던 예쁜 디자인 적용 완료!)
   // =========================================================================
-  if (userRole === 'INFRA' && infraStats) {
-    // 데이터 없으면 기본값(연결 실패 등) 세팅
-    const status_summary = infraStats.status_summary || {
-        alert: { critical: "연결 실패", warning: 0 },
-        eks: { nodes_ready: "연결 실패", pods_crash: 0 },
-        vpn: { status: "DOWN", latency: "-" },
-        db: { usage_percent: "연결 실패", blocked: false }
+  if (userRole === 'INFRA') {
+    // 🌟 방어막: 데이터 없으면 로딩
+    if (!infraStats) return <Box display="flex" justifyContent="center" p={10}><CircularProgress /></Box>;
+
+    const stats = infraStats || {};
+    const status_summary = stats.status_summary || {
+        alert: { critical: 0, warning: 0 },
+        eks: { nodes_ready: 0, pods_crash: 0 },
+        vpn: { status: "CHECK", latency: "-" },
+        db: { usage_percent: 0, blocked: false }
     };
-    
-    const recent_events = infraStats.recent_events || [];
-    
-    const quick_links = infraStats.quick_links || {
-        grafana_cluster: "#", grafana_db: "#", hubble: "#", 
-        loki: "#", argocd: "#", runbook: "#"
-    };
+    const recent_events = stats.recent_events || [];
+    const quick_links = stats.quick_links || {};
 
     const getStatusColor = (val, isGoodCondition) => {
-        if (val === "연결 실패" || (typeof val === 'string' && val.includes("실패"))) return '#757575'; 
+        if (val === "CHECK" || val === "연결 실패" || (typeof val === 'string' && val.includes("실패"))) return '#757575'; 
         return isGoodCondition ? '#2e7d32' : '#d32f2f'; 
     };
 
-    const openLink = (url) => window.open(url, '_blank');
+    const openLink = (url) => {
+      if (!url || url === "#") return;
+      window.open(url, '_blank');
+    };
 
     return (
-      <Box sx={commonFont}>
-        <Typography variant="h5" gutterBottom mb={3} fontWeight="bold" color="#333">
-          🛠️ 인프라 운영 콘솔
+      <Box sx={commonFont} p={3}>
+        <Typography variant="h4" gutterBottom sx={titleStyle}>
+          <DnsIcon fontSize="large" sx={{ color: '#1565c0' }} /> 인프라 운영 콘솔
         </Typography>
         
         {/* (A) 상태 카드 */}
@@ -128,8 +136,8 @@ function Dashboard() {
           <Grid item xs={12} md={3}>
             <StatCard 
               title="Alert 요약" 
-              value={status_summary.alert.critical === "연결 실패" ? "연결 실패" : `${status_summary.alert.critical} Critical`} 
-              subText={status_summary.alert.critical === "연결 실패" ? "Prometheus 응답 없음" : `${status_summary.alert.warning} Warnings`}
+              value={`${status_summary.alert.critical} Critical`} 
+              subText={`${status_summary.alert.warning} Warnings`}
               statusColor={getStatusColor(status_summary.alert.critical, status_summary.alert.critical === 0)}
               onClick={() => openLink(quick_links.grafana_cluster)}
             />
@@ -137,8 +145,8 @@ function Dashboard() {
           <Grid item xs={12} md={3}>
             <StatCard 
               title="EKS 상태" 
-              value={status_summary.eks.nodes_ready === "연결 실패" ? "연결 실패" : `${status_summary.eks.nodes_ready} Nodes Ready`} 
-              subText={status_summary.eks.nodes_ready === "연결 실패" ? "K8s API 응답 없음" : `${status_summary.eks.pods_crash} Pods CrashLoop`}
+              value={`${status_summary.eks.nodes_ready} Nodes Ready`} 
+              subText={`${status_summary.eks.pods_crash} Pods Crash`}
               statusColor={getStatusColor(status_summary.eks.nodes_ready, status_summary.eks.pods_crash === 0)}
               onClick={() => openLink(quick_links.grafana_cluster)}
             />
@@ -154,8 +162,8 @@ function Dashboard() {
           <Grid item xs={12} md={3}>
             <StatCard 
               title="DB 연결 상태" 
-              value={status_summary.db.usage_percent === "연결 실패" ? "연결 실패" : `${status_summary.db.usage_percent}% 사용중`} 
-              subText={status_summary.db.usage_percent === "연결 실패" ? "Ping 응답 없음" : (status_summary.db.blocked ? "Blocked Session 감지됨!" : "세션 상태 양호")}
+              value={`${status_summary.db.usage_percent}% 사용중`} 
+              subText={status_summary.db.blocked ? "Blocked Session 감지됨!" : "세션 상태 양호"}
               statusColor={getStatusColor(status_summary.db.usage_percent, !status_summary.db.blocked)}
               onClick={() => openLink(quick_links.grafana_db)}
             />
@@ -163,9 +171,10 @@ function Dashboard() {
         </Grid>
 
         {/* (B) 퀵 메뉴 */}
-        <Typography variant="h6" gutterBottom fontWeight="bold" sx={{ mt: 5, mb: 2 }}>
-          🚀 퀵 메뉴 (Quick Links)
+        <Typography variant="h6" gutterBottom sx={{ ...titleStyle, mt: 5, mb: 2 }}>
+          <RocketLaunchIcon color="secondary" /> 퀵 메뉴 (Quick Links)
         </Typography>
+        
         <Grid container spacing={2} mb={5}>
           {[
             { name: "Grafana (Cluster)", icon: <MonitorHeartIcon />, url: quick_links.grafana_cluster },
@@ -196,8 +205,8 @@ function Dashboard() {
         </Grid>
 
         {/* (C) 최근 이벤트 테이블 */}
-        <Typography variant="h6" gutterBottom fontWeight="bold" sx={{ mb: 2 }}>
-          🔔 최근 이벤트 (Recent Events)
+        <Typography variant="h6" gutterBottom sx={{ ...titleStyle, mb: 2 }}>
+          <NotificationsActiveIcon color="warning" /> 최근 이벤트 (Recent Events)
         </Typography>
         <TableContainer component={Paper} elevation={3} sx={{ borderRadius: 3, overflow: 'hidden', mb: 10 }}>
           <Table size="small">
@@ -210,7 +219,7 @@ function Dashboard() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {recent_events.map((evt, idx) => (
+              {recent_events.length > 0 ? recent_events.map((evt, idx) => (
                 <TableRow key={idx} hover>
                   <TableCell sx={commonFont}>{evt.time}</TableCell>
                   <TableCell align="center">
@@ -224,7 +233,13 @@ function Dashboard() {
                   <TableCell sx={{ fontWeight: 'bold', color: '#555', ...commonFont }}>{evt.target}</TableCell>
                   <TableCell sx={commonFont}>{evt.message}</TableCell>
                 </TableRow>
-              ))}
+              )) : (
+                <TableRow>
+                  <TableCell colSpan={4} align="center" sx={{ py: 3, color: '#999' }}>
+                    최근 이벤트가 없습니다.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </TableContainer>
@@ -233,7 +248,7 @@ function Dashboard() {
   }
 
   // =========================================================================
-  // 💰 [View 2] 재무팀 전용 화면
+  // 💰 [View 2] 재무팀 전용 화면 (해빈님 기존 코드 유지!)
   // =========================================================================
   return (
     <Box sx={commonFont} p={3}>
@@ -258,7 +273,7 @@ function Dashboard() {
         </Grid>
       </Grid>
 
-{/* 🌟 차트 구역 - Grid v2 방식 (size 속성)으로 안전하게 수정 */}
+      {/* 🌟 차트 구역 */}
       <Grid container spacing={3}>
         
         {/* 1. 최근 7일 규정 위반 차트 */}
@@ -267,11 +282,9 @@ function Dashboard() {
           <Paper sx={{ p: 3, borderRadius: 3, boxShadow: 3 }}>
             <Box sx={{ width: '100%', height: 300 }}> 
               <ResponsiveContainer width="100%" height="100%">
-                {/* 🌟 숫자가 안 잘리게 위쪽(top) 여백을 30으로 늘렸어요! */}
                 <BarChart data={financeStats.daily_violations} margin={{ top: 30, right: 20, left: 20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="day" />
-                  {/* 🌟 천장을 데이터 최대값보다 1 높게 설정해서 공간을 만듭니다! */}
                   <YAxis allowDecimals={false} domain={[0, 'dataMax + 1']} />
                   <Tooltip />
                   <Bar dataKey="count" fill="#e53935" radius={[5, 5, 0, 0]} barSize={50}>
@@ -289,11 +302,9 @@ function Dashboard() {
           <Paper sx={{ p: 3, borderRadius: 3, boxShadow: 3 }}>
             <Box sx={{ width: '100%', height: 300 }}>
               <ResponsiveContainer width="100%" height="100%">
-                {/* 🌟 여기도 마찬가지로 top margin 30! */}
                 <BarChart data={financeStats.department_stats} margin={{ top: 30, right: 20, left: 20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="name" />
-                  {/* 🌟 4보다 큰 숫자가 와도 자동으로 늘어나게 domain 설정! */}
                   <YAxis allowDecimals={false} domain={[0, 'dataMax + 1']} />
                   <Tooltip />
                   <Bar dataKey="value" fill="#8e24aa" radius={[5, 5, 0, 0]} barSize={50}>
