@@ -1,0 +1,16 @@
+apiVersion: v2
+name: monitoring
+description: EKS Monitoring Umbrella Chart (kube-prometheus-stack + loki) with auto Grafana datasources/dashboards
+type: application
+version: 0.1.0
+
+dependencies:
+  - name: kube-prometheus-stack
+    alias: kps
+    version: "80.6.0"
+    repository: "https://prometheus-community.github.io/helm-charts"
+
+  - name: loki
+    alias: loki
+    version: "5.47.2"
+    repository: "https://grafana.github.io/helm-charts"
