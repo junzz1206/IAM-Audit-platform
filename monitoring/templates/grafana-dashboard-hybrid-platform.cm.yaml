@@ -1,10 +1,12 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: grafana-dashboard-hybrid-platform
+  name: grafana-dashboards
   namespace: {{ .Release.Namespace }}
   labels:
     grafana_dashboard: "1"
 data:
-  hybrid-platform.json: |-
-{{ .Files.Get "dashboards/hybrid-platform.json" | nindent 4 }}
+{{- range $path, $bytes := .Files.Glob "dashboards/*.json" }}
+  {{ base $path }}: |-
+{{ $bytes | toString | nindent 4 }}
+{{- end }}
