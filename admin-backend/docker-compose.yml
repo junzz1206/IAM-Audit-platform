@@ -1,41 +1,118 @@
 version: '3.8'
 
 services:
-  # 1. Redis (데이터 저장소) - 도커가 알아서 설치하고 실행해줌
+  # 1. Redis
   redis:
     image: redis:alpine
     ports:
       - "6379:6379"
 
-  # 2. Core Service (금융) - 8000번 포트
+  # 2. Core Service (금융)
   core-service:
     build: ./core-service
     ports:
       - "8000:8000"
     environment:
+      # 👇 [추가] Core Service도 이게 없으면 꺼질 수 있어요! (안전빵)
+      - PROJECT_NAME="Core Finance Service"
+      - VERSION="1.0.0"
+      - DEBUG=True
+      - ALLOWED_ORIGINS=["*"]
+
+      # [DB 연결]
+      - DATABASE_URL=postgresql://postgres:123456@host.docker.internal:5432/finance_db
+      - DB_HOST=host.docker.internal
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=123456
+      - DB_NAME=finance_db
+
+      # [Config.py 필수 변수]
+      - REAL_DB_HOST=host.docker.internal
+      - REAL_DB_PORT=5432
+      - REAL_DB_USER=postgres
+      - REAL_DB_PASSWORD=123456
+      - REAL_DB_NAME=finance_db
+
+      # [Redis & 보안]
       - REDIS_HOST=redis
-      - DB_HOST=192.168.1.151
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - SECRET_KEY=haebin_core_super_secret_key_v1
+      - ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=60
+      
+      # [인프라 & Audit 연결]
+      - PROMETHEUS_URL=http://prometheus-service:9090
+      - VPN_GATEWAY_IP=127.0.0.1
+      - KUBE_CONFIG_PATH=""
+      - LINK_GRAFANA_CLUSTER=http://grafana.example.com/d/cluster
+      - LINK_GRAFANA_DB=http://grafana.example.com/d/postgresql
+      - LINK_HUBBLE=http://hubble.example.com
+      - LINK_LOKI=http://grafana.example.com/explore
+      - LINK_ARGOCD=http://argocd.example.com
+      - LINK_RUNBOOK=https://notion.so/my-runbook
+      - AUDIT_SERVICE_URL=http://audit-service:8000
     depends_on:
       - redis
 
-  # 3. Auth Service (인증) - 8001번 포트 (내부 8000 -> 외부 8001 연결)
+  # 3. Auth Service (인증)
   auth-service:
     build: ./auth-service
     ports:
       - "8001:8000"
     environment:
+      # 👇 [추가] 아까 에러 났던 부분!
+      - PROJECT_NAME="IAM Auth Service"
+      - VERSION="1.0.0"
+      - DEBUG=True
+      - ALLOWED_ORIGINS=["*"]
+
+      # [DB 연결]
+      - DATABASE_URL=postgresql://postgres:123456@host.docker.internal:5432/iam_db
+      - DB_HOST=host.docker.internal
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=123456
+      - DB_NAME=iam_db
+      
+      # [Redis & 보안]
       - REDIS_HOST=redis
-      - DB_HOST=192.168.1.151
+      - REDIS_PORT=6379
+      - REDIS_DB=1
+      - SECRET_KEY=haebin_iam_super_secret_key_2026
+      - ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=60
+      
+      # [Audit 연결]
+      - AUDIT_SERVICE_URL=http://audit-service:8000
+      - LOG_SERVICE_URL=http://audit-service:8000
     depends_on:
       - redis
 
-  # 4. Audit Service (감사) - 8002번 포트 (내부 8000 -> 외부 8002 연결)
+  # 4. Audit Service (감사)
   audit-service:
     build: ./audit-service
     ports:
       - "8002:8000"
     environment:
+      # 👇 [추가] Audit Service도 추가 완료!
+      - PROJECT_NAME="Audit Service"
+      - VERSION="1.0.0"
+      - DEBUG=True
+      - ALLOWED_ORIGINS=["*"]
+
+      # [DB 연결]
+      - DATABASE_URL=postgresql://postgres:123456@host.docker.internal:5432/audit_db
+      - DB_HOST=host.docker.internal
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=123456
+      - DB_NAME=audit_db
+
+      # [Redis]
       - REDIS_HOST=redis
-      - DB_HOST=192.168.1.151
+      - REDIS_PORT=6379
+      - REDIS_DB=2
     depends_on:
       - redis

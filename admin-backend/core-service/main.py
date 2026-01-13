@@ -8,7 +8,7 @@ import csv
 import io
 import requests
 import uuid
-# 🌟 [수정] 한국 시간 계산을 위해 timedelta 추가
+import os  # 🌟 [필수 추가] 환경변수 쓰려면 필요!
 from datetime import datetime, timedelta 
 from config import settings
 
@@ -30,25 +30,35 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 📡 [수정됨] 감사 로그 전송 (한국 시간 적용!)
+# 📡 [수정됨] 감사 로그 전송 함수
 def send_audit_log(actor: str, action: str, result: str, target: str):
     try:
-        # 🌟 UTC 현재 시간에서 9시간을 더해 KST로 변환!
+        # 1. 한국 시간(KST) 변환
         kst_now = datetime.utcnow() + timedelta(hours=9)
         
         log_data = {
             "event_type": "TRANSACTION", 
             "actor_id": actor,
             "actor_type": "USER",
-            "source_ip": "127.0.0.1",
+            "source_ip": "CORE_SYSTEM", # 내부 시스템이라 고정
             "action": action, 
             "result": result,
             "target_id": target,
             "target_type": "SYSTEM",
-            # 🌟 DB 시간이 아니라, 여기서 계산한 한국 시간을 보냅니다!
             "event_time": kst_now.strftime("%Y-%m-%d %H:%M:%S")
         }
-        requests.post("http://127.0.0.1:8002/logs", json=log_data, timeout=1)
+        
+        # ---------------------------------------------------------
+        # 🌟 [수정] 여기가 핵심! 127.0.0.1 삭제 -> 환경변수 사용
+        # docker-compose.yml이 주는 'http://audit-service:8000'을 씁니다.
+        # ---------------------------------------------------------
+        audit_url = os.getenv("AUDIT_SERVICE_URL", "http://audit-service:8000")
+        
+        requests.post(f"{audit_url}/logs", json=log_data, timeout=1)
+        
+        # 전송 확인 로그
+        print(f"🚀 [Log Sent] {action} - {actor}")
+
     except Exception as e:
         print(f"⚠️ Audit Log 전송 실패: {e}")
 
@@ -59,19 +69,16 @@ def find_idx(headers, candidates):
     return -1
 
 # =========================================================
-# 📊 [View 2] 재무팀 통계 조회 API (해빈님 원본 그대로!)
+# 📊 [View 2] 재무팀 통계 조회 API
 # =========================================================
 @app.get("/stats")
 def get_stats(db: Session = Depends(get_db)):
-    # 1. 상단 카드용 전체 숫자
     total = db.query(models.CardTransaction).count()
     violation = db.query(models.ViolationResult).filter(models.ViolationResult.is_violation == True).count()
 
-    # 🌟 오늘 기준 최근 7일 날짜 설정 (2026-01-12 기준)
-    today = datetime(2026, 1, 12) 
+    today = datetime.now() 
     start_date = today - timedelta(days=6)
 
-    # 2. 최근 7일간 위반 건수
     daily_res = db.query(
         func.to_char(models.CardTransaction.tx_date, 'MM/DD').label('day'),
         func.count(models.ViolationResult.violation_id).label('count')
@@ -86,7 +93,6 @@ def get_stats(db: Session = Depends(get_db)):
         )
     ).group_by('day').order_by('day').all()
 
-    # 3. 부서별 위반 현황
     dept_res = db.query(
         models.CardTransaction.department.label('name'),
         func.count(models.ViolationResult.violation_id).label('value')
@@ -106,11 +112,10 @@ def get_stats(db: Session = Depends(get_db)):
     }
 
 # =========================================================
-# 🛠️ [View 1] 인프라 운영 콘솔 API (🔥 여기만 바꿨습니다!)
+# 🛠️ [View 1] 인프라 운영 콘솔 API
 # =========================================================
 @app.get("/dashboard/infra")
 def get_infra_dashboard(db: Session = Depends(get_db)):
-    # 1. Prometheus 상태 체크
     prom_status = "DOWN"
     try:
         if settings.PROMETHEUS_URL:
@@ -118,22 +123,17 @@ def get_infra_dashboard(db: Session = Depends(get_db)):
             prom_status = "UP"
     except: pass
     
-    # 2. 진짜 DB 접속률 체크 (pg_stat_activity 사용)
     real_db_usage = 0
-    db_conn_count = 0
     try:
-        # 해빈님이 연결한 그 DB의 실제 세션 수를 가져옵니다!
         result = db.execute(text("SELECT count(*) FROM pg_stat_activity;"))
         db_conn_count = result.scalar()
-        real_db_usage = int((db_conn_count / 100) * 100) # 100개 기준 퍼센트
+        real_db_usage = int((db_conn_count / 100) * 100)
     except Exception as e:
         print(f"⚠️ DB Check Error: {e}")
 
-    # 🌟 3. [Real-Time Alert] 문제가 있을 때만 events 리스트에 추가!
     events = []
     current_time = datetime.now().strftime("%H:%M")
 
-    # (조건 1) DB 사용량이 80%를 넘으면 경고!
     if real_db_usage >= 80:
         events.append({
             "time": current_time,
@@ -142,7 +142,6 @@ def get_infra_dashboard(db: Session = Depends(get_db)):
             "message": f"🔥 과부하 경고: 세션 점유율 {real_db_usage}% 도달!"
         })
 
-    # (조건 2) Prometheus가 죽어있으면 경고!
     if prom_status != "UP":
         events.append({
             "time": current_time,
@@ -151,7 +150,6 @@ def get_infra_dashboard(db: Session = Depends(get_db)):
             "message": "⚠️ Prometheus 서버 응답 없음"
         })
 
-    # 상단 카드용 데이터 요약
     alert_summary = {"critical": 0, "warning": 0}
     if prom_status != "UP": alert_summary["warning"] += 1
     if real_db_usage >= 80: alert_summary["critical"] += 1
@@ -162,7 +160,7 @@ def get_infra_dashboard(db: Session = Depends(get_db)):
             "eks": {"nodes_ready": 5, "pods_crash": 0},
             "vpn": {"status": "UP", "latency": "12ms"},
             "db": {
-                "usage_percent": real_db_usage, # 👈 리얼 데이터
+                "usage_percent": real_db_usage, 
                 "blocked": False, 
                 "host": settings.REAL_DB_HOST 
             }
@@ -175,11 +173,11 @@ def get_infra_dashboard(db: Session = Depends(get_db)):
             "argocd": settings.LINK_ARGOCD,
             "runbook": settings.LINK_RUNBOOK
         },
-        "recent_events": events # 👈 평소엔 [], 문제 생기면 알람 뜸!
+        "recent_events": events
     }
 
 # =========================================================
-# 📤 파일 업로드 API (해빈님 원본 로직 100% 유지)
+# 📤 파일 업로드 API
 # =========================================================
 @app.post("/transactions/upload")
 async def upload_transactions(file: UploadFile = File(...), db: Session = Depends(get_db)):
@@ -198,7 +196,6 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
     if not rows: return {"message": "파일이 비어있습니다."}
 
     headers = [h.strip().lower().replace(" ", "") for h in rows[0]]
-    # 🌟 해빈님이 작성한 변수명 그대로 유지!
     idx_tx_id = find_idx(headers, ["거래번호", "tx_id", "id"])
     idx_date = find_idx(headers, ["승인일시", "tx_date", "날짜"])
     idx_merchant = find_idx(headers, ["가맹점명", "merchant", "가맹점"])
@@ -227,7 +224,6 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
 
             amount_val = float(str(get_val(idx_amount)).replace(",", ""))
 
-            # 🌟 해빈님의 위반 판단 로직 유지
             is_violation = False
             reason_txt = ""
             severity_val = 1
@@ -269,12 +265,13 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
 
     db.commit()
 
+    # 파일 업로드 성공 로그 전송
     send_audit_log(actor="admin", action="UPLOAD", result="SUCCESS", target="Card_CSV")
     
     return {"message": f"{processed_count}건 처리 완료"}
 
 # =========================================================
-# 🚨 위반 내역 조회 API (해빈님 원본 그대로!)
+# 🚨 위반 내역 조회 API
 # =========================================================
 @app.get("/violations")
 def get_violations(db: Session = Depends(get_db)):

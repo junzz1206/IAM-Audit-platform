@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 // 🌟 Grid 불러오기
 import Grid from '@mui/material/Grid'; 
+import AnalyticsIcon from '@mui/icons-material/Analytics';
 
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
 
@@ -252,8 +253,17 @@ function Dashboard() {
   // =========================================================================
   return (
     <Box sx={commonFont} p={3}>
-      <Typography variant="h5" gutterBottom mb={3} fontWeight="bold" color="#333">
-        📊 재무 관리 대시보드
+      {/* 제목 크기를 variant="h4"로 키우고 다른 페이지와 스타일을 통일 */}
+      <Typography 
+        variant="h4" 
+        gutterBottom 
+        fontWeight="bold" 
+        color="text.primary" 
+        sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}
+      >
+        {/* 👇 📊 대신 세련된 블루 컬러의 Analytics 아이콘으로 교체! */}
+        <AnalyticsIcon fontSize="large" sx={{ color: '#1565c0' }} />
+        재무 관리 대시보드
       </Typography>
 
       <Grid container spacing={3} mb={5}>

@@ -33,7 +33,8 @@ function Violation() {
   const [sortOrder, setSortOrder] = useState('UPLOAD');
 
   const getSeverity = (amount, reason = '') => {
-    if (reason.includes('유흥') || reason.includes('쪼개기') || amount >= 500000) {
+    // 👇 '제한 업종'이 포함되면 무조건 DANGER(error)가 되도록 맨 위로 올렸어요!
+    if (reason.includes('제한 업종') || reason.includes('유흥') || reason.includes('쪼개기') || amount >= 500000) {
         return { label: 'DANGER', color: 'error' }; 
     }
     if (reason.includes('한도') || reason.includes('주말') || reason.includes('심야')) {

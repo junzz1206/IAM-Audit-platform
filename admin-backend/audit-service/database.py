@@ -7,6 +7,11 @@ from dotenv import load_dotenv
 # 1. .env 로드
 load_dotenv()
 
+# 2. 연결 URL 결정 (여기가 핵심!)
+# 도커가 보내주는 완성된 주소(DATABASE_URL)가 있으면 그걸 씁니다!
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
+
+
 # 2. 환경변수 가져오기 (없으면 기본값)
 DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "123456")
