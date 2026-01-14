@@ -31,7 +31,7 @@ metadata:
     # ✅ ALB 1개 공유(그룹) + ALB 이름 고정
     alb.ingress.kubernetes.io/group.name: rockyvicky-shared
     alb.ingress.kubernetes.io/group.order: "10"
-    alb.ingress.kubernetes.io/load-balancer-name: rockyvicky-dev-
+    alb.ingress.kubernetes.io/load-balancer-name: rockyvicky-dev-alb
 
     # ✅ ALB 기본
     alb.ingress.kubernetes.io/scheme: internet-facing
@@ -46,6 +46,8 @@ metadata:
 
     # ✅ 헬스체크 (프론트 nginx는 / 200 OK 가정)
     alb.ingress.kubernetes.io/healthcheck-path: /
+
+    external-dns.alpha.kubernetes.io/hostname: rockyvicky.com
 spec:
   ingressClassName: alb
   rules:
@@ -89,6 +91,8 @@ metadata:
 
     # ✅ API 헬스체크: /healthz 가 200을 반드시 반환해야 함
     alb.ingress.kubernetes.io/healthcheck-path: /healthz
+
+    external-dns.alpha.kubernetes.io/hostname: api.rockyvicky.com
 spec:
   ingressClassName: alb
   rules:
@@ -132,6 +136,8 @@ metadata:
 
     # ✅ Admin 헬스체크 (보통 / 또는 /health)
     alb.ingress.kubernetes.io/healthcheck-path: /
+
+    external-dns.alpha.kubernetes.io/hostname: admin.rockyvicky.com
 spec:
   ingressClassName: alb
   rules:

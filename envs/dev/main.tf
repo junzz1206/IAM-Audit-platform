@@ -191,29 +191,92 @@ module "valkey" {
   auto_minor_version_upgrade = var.valkey_auto_minor_version_upgrade
 }
 
-#aws_load_balancer_controller
-module "aws_load_balancer_controller" {
-  source = "../../modules/aws_load_balancer_controller"
+# alb_controller
+module "alb_controller" {
+  source = "../../modules/alb_controller"
+
+  project_name       = var.project_name
+  env                = var.env
+  region             = var.region
+  tags               = var.tags
+
+  cluster_name       = module.eks.cluster_name
+  vpc_id             = module.vpc.vpc_id
+
+  oidc_provider_arn  = module.eks.oidc_provider_arn
+  oidc_issuer_url    = module.eks.oidc_issuer_url
+
+  # dev는 고정 추천 (예: "1.?.?")
+  helm_chart_version = var.alb_controller_chart_version
+}
+
+
+# route53_externaldns
+module "route53_externaldns" {
+  source = "./modules/route53_externaldns"
 
   cluster_name              = module.eks.cluster_name
   region                    = var.region
-  vpc_id                    = module.vpc.vpc_id
+
+  domain_name               = "rockyvicky.com"
+  create_hosted_zone        = false
+  hosted_zone_id            = var.hosted_zone_id
+
   cluster_oidc_provider_arn = module.eks.oidc_provider_arn
   cluster_oidc_issuer_url   = module.eks.oidc_issuer_url
 
-  helm_chart_version        = var.lbc_chart_version
+  txt_owner_id              = "rockyvicky-dev"
+  policy                    = "upsert-only" # 운영 안전 우선이면 upsert-only 추천
 
   tags = var.tags
 }
 
+# acm_cert
+module "acm" {
+  source = "./modules/acm_cert"
 
-#route53_zone
-module "route53" {
-  source = "./modules/route53_zone"
+  domain_name     = "rockyvicky.com"
+  hosted_zone_id  = "Z026212028803MNA1UOL0"
 
-  domain_name              = var.domain_name          # rockyvicky.com
-  create_hosted_zone       = true
-  create_externaldns_policy = true
+  # 기본: apex + wildcard 1장
+  create_wildcard = true
+
+  # 보통 wildcard면 api/admin 포함되니 굳이 안 넣어도 됨
+  additional_sans = []
 
   tags = var.tags
+}
+
+# waf
+module "waf" {
+  source = "../../modules/waf"
+
+  project_name = var.project_name
+  env          = var.env
+
+  # 처음엔 튜닝 목적 COUNT 추천 (지금 일정 촉박하면 특히)
+  count_mode = true
+
+  enable_logging       = false
+  log_destination_arns = []
+
+  tags = var.tags
+}
+
+# externaldns
+module "externaldns" {
+  source = "../../modules/externaldns"
+
+  cluster_name = module.eks.cluster_name
+  region       = var.aws_region
+  vpc_id       = module.vpc.vpc_id
+
+  oidc_provider_arn = module.eks.oidc_provider_arn
+  oidc_issuer_url   = module.eks.oidc_issuer_url
+
+  hosted_zone_id = module.route53_externaldns.hosted_zone_id
+  domain_filter  = "rockyvicky.com"
+
+  txt_owner_id = var.externaldns_txt_owner_id
+  policy       = var.externaldns_policy # "upsert-only" 추천(초기), 운영정리 원하면 "sync"
 }

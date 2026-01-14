@@ -83,6 +83,15 @@ variable "valkey_auto_minor_version_upgrade" {
   default = true 
 }
 
+variable "externaldns_txt_owner_id" {
+  type = string
+}
+
+variable "externaldns_policy" {
+  type    = string
+  default = "upsert-only"
+}
+
 
 
 
