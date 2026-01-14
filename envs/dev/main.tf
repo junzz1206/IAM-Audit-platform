@@ -195,30 +195,17 @@ module "valkey" {
 module "aws_load_balancer_controller" {
   source = "../../modules/aws_load_balancer_controller"
 
-  # (EKS)
-  cluster_name = module.eks.cluster_name
-  region       = var.aws_region
-  vpc_id       = module.network.vpc_id
+  cluster_name              = module.eks.cluster_name
+  region                    = var.region
+  vpc_id                    = module.vpc.vpc_id
+  cluster_oidc_provider_arn = module.eks.oidc_provider_arn
+  cluster_oidc_issuer_url   = module.eks.oidc_issuer_url
 
-  # (IRSA outputs 그대로 사용)
-  oidc_provider_arn = module.irsa.oidc_provider_arn
-  oidc_provider_url = module.irsa.oidc_issuer_url
+  helm_chart_version        = var.lbc_chart_version
 
-  # (Policy 파일은 repo에 포함된 파일을 path.module 기준으로 참조)
-  iam_policy_json_path = "${path.module}/../../modules/aws_load_balancer_controller/policy/iam_policy.json"
-
-  # provider alias wiring (중요)
-  providers = {
-    kubernetes = kubernetes.eks
-    helm       = helm.eks
-  }
-
-  # 권장: 클러스터/OIDC가 준비된 뒤 설치되도록 안정성 보강
-  depends_on = [
-    module.eks,
-    module.irsa
-  ]
+  tags = var.tags
 }
+
 
 #route53_zone
 module "route53" {

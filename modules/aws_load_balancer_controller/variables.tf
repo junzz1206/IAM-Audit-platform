@@ -1,60 +1,54 @@
 variable "cluster_name" {
-  description = "EKS cluster name"
   type        = string
+  description = "EKS cluster name"
 }
 
 variable "region" {
-  description = "AWS region"
   type        = string
+  description = "AWS region"
 }
 
 variable "vpc_id" {
-  description = "VPC ID (권한 조건 스코핑에 사용 가능)"
   type        = string
+  description = "VPC ID where EKS is deployed"
 }
 
-variable "oidc_provider_arn" {
-  description = "EKS OIDC provider ARN"
+variable "cluster_oidc_provider_arn" {
   type        = string
+  description = "IAM OIDC provider ARN for the EKS cluster"
 }
 
-variable "oidc_provider_url" {
-  description = "EKS OIDC issuer URL (예: https://oidc.eks.ap-northeast-2.amazonaws.com/id/XXXX)"
+variable "cluster_oidc_issuer_url" {
   type        = string
+  description = "OIDC issuer URL for the EKS cluster (starts with https://...)"
 }
 
-variable "namespace" {
-  description = "Namespace to install controller"
+variable "service_account_namespace" {
   type        = string
   default     = "kube-system"
+  description = "Namespace of aws-load-balancer-controller ServiceAccount"
 }
 
 variable "service_account_name" {
-  description = "ServiceAccount name for controller"
   type        = string
   default     = "aws-load-balancer-controller"
-}
-
-variable "helm_release_name" {
-  description = "Helm release name"
-  type        = string
-  default     = "aws-load-balancer-controller"
+  description = "Name of aws-load-balancer-controller ServiceAccount"
 }
 
 variable "helm_chart_version" {
-  description = "Helm chart version (고정 권장, 예: 1.7.x 등)"
   type        = string
-  default     = null
+  default     = "1.8.2"
+  description = "Helm chart version for aws-load-balancer-controller (set per your standard)"
 }
 
-variable "iam_policy_json_path" {
-  description = "AWS Load Balancer Controller IAM policy JSON file path (repo에 같이 커밋 권장)"
-  type        = string
-  default     = null
+variable "iam_policy_scope_to_vpc" {
+  type        = bool
+  default     = true
+  description = "If true, scope down some EC2 SG rule permissions to this VPC"
 }
 
-variable "load_balancer_name" {
-  description = "Ingress에 alb.ingress.kubernetes.io/load-balancer-name으로 고정할 ALB name(선택)"
-  type        = string
-  default     = null
+variable "tags" {
+  type        = map(string)
+  default     = {}
+  description = "Common tags"
 }
