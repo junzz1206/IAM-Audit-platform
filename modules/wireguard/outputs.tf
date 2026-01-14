@@ -19,7 +19,7 @@ output "eip_public_ip" {
 }
 
 output "eip_allocation_id" {
-  value = aws_eip.wg.id
+  value = aws_eip.wg.allocation_id
 }
 
 output "wireguard_port" { 

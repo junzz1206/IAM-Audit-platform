@@ -1,0 +1,147 @@
+# =========================================
+# 00) Namespaces (없으면 생성)
+# =========================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: service
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: iam-api
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: admin-ui
+
+---
+# =========================================
+# 01) Front Ingress (rockyvicky.com) - ns: service
+# 같은 ALB(1개) 공유 + host 기반 라우팅
+# =========================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: front-alb
+  namespace: service
+  annotations:
+    kubernetes.io/ingress.class: alb
+    # ✅ ALB 1개 공유(그룹) + ALB 이름 고정
+    alb.ingress.kubernetes.io/group.name: rockyvicky-shared
+    alb.ingress.kubernetes.io/group.order: "10"
+    alb.ingress.kubernetes.io/load-balancer-name: rockyvicky-dev-
+
+    # ✅ ALB 기본
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+
+    # ✅ 리스너 + HTTP→HTTPS 리다이렉트
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+
+    # ✅ ACM 인증서
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-northeast-2:177337574189:certificate/3f9a377b-fd76-4842-8dfa-7b5e3ed103ff
+
+    # ✅ 헬스체크 (프론트 nginx는 / 200 OK 가정)
+    alb.ingress.kubernetes.io/healthcheck-path: /
+spec:
+  ingressClassName: alb
+  rules:
+  - host: rockyvicky.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: nginx
+            port:
+              number: 80
+
+---
+# =========================================
+# 02) API Ingress (api.rockyvicky.com) - ns: iam-api
+# 같은 ALB(1개) 공유 + host 기반 라우팅
+# =========================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-alb
+  namespace: iam-api
+  annotations:
+    # ✅ ALB 1개 공유(그룹) + ALB 이름 고정
+    alb.ingress.kubernetes.io/group.name: rockyvicky-shared
+    alb.ingress.kubernetes.io/group.order: "20"
+    alb.ingress.kubernetes.io/load-balancer-name: rockyvicky-dev-alb
+
+    # ✅ ALB 기본 (공유 ALB이므로 값은 모두 동일하게 유지)
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+
+    # ✅ 리스너 + HTTP→HTTPS 리다이렉트 (공유 ALB이므로 모두 동일 유지)
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+
+    # ✅ ACM 인증서 (공유 ALB이므로 모두 동일 유지)
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-northeast-2:177337574189:certificate/3f9a377b-fd76-4842-8dfa-7b5e3ed103ff
+
+    # ✅ API 헬스체크: /healthz 가 200을 반드시 반환해야 함
+    alb.ingress.kubernetes.io/healthcheck-path: /healthz
+spec:
+  ingressClassName: alb
+  rules:
+  - host: api.rockyvicky.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: api-service
+            port:
+              number: 8080
+
+---
+# =========================================
+# 03) Admin Ingress (admin.rockyvicky.com) - ns: admin-ui
+# 같은 ALB(1개) 공유 + host 기반 라우팅
+# =========================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: admin-alb
+  namespace: admin-ui
+  annotations:
+    # ✅ ALB 1개 공유(그룹) + ALB 이름 고정
+    alb.ingress.kubernetes.io/group.name: rockyvicky-shared
+    alb.ingress.kubernetes.io/group.order: "30"
+    alb.ingress.kubernetes.io/load-balancer-name: rockyvicky-dev-alb
+
+    # ✅ ALB 기본 (공유 ALB이므로 값은 모두 동일하게 유지)
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+
+    # ✅ 리스너 + HTTP→HTTPS 리다이렉트 (공유 ALB이므로 모두 동일 유지)
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+
+    # ✅ ACM 인증서 (공유 ALB이므로 모두 동일 유지)
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-northeast-2:177337574189:certificate/3f9a377b-fd76-4842-8dfa-7b5e3ed103ff
+
+    # ✅ Admin 헬스체크 (보통 / 또는 /health)
+    alb.ingress.kubernetes.io/healthcheck-path: /
+spec:
+  ingressClassName: alb
+  rules:
+  - host: admin.rockyvicky.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: admin-service
+            port:
+              number: 80

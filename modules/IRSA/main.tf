@@ -6,38 +6,49 @@ data "aws_eks_cluster" "this" {
 locals {
   oidc_issuer_url  = data.aws_eks_cluster.this.identity[0].oidc[0].issuer
   oidc_issuer_host = replace(local.oidc_issuer_url, "https://", "")
+
+  common_tags = merge(var.tags, {
+    Env       = var.env
+    ManagedBy = "Terraform"
+  })
 }
 
-# IAM OIDC Provider
+# If we create OIDC provider: need thumbprint
 data "tls_certificate" "oidc" {
-  url = local.oidc_issuer_url
+  count = var.create_oidc_provider ? 1 : 0
+  url   = local.oidc_issuer_url
 }
 
+# ✅ (선택) OIDC provider 생성
 resource "aws_iam_openid_connect_provider" "eks" {
+  count = var.create_oidc_provider ? 1 : 0
+
   url = local.oidc_issuer_url
 
-  client_id_list = [
-    "sts.amazonaws.com"
-  ]
+  client_id_list = ["sts.amazonaws.com"]
 
   thumbprint_list = [
-    data.tls_certificate.oidc.certificates[0].sha1_fingerprint
+    data.tls_certificate.oidc[0].certificates[0].sha1_fingerprint
   ]
 
-  tags = merge(var.tags, {
+  tags = merge(local.common_tags, {
     Name = "${var.project_name}-${var.env}-eks-oidc"
   })
 }
 
-# IRSA: AWS Load Balancer Controller
-locals {
-  alb_sa_namespace = "kube-system"
-  alb_sa_name      = "aws-load-balancer-controller"
-
-  ca_sa_namespace = "kube-system"
-  ca_sa_name      = "cluster-autoscaler"
+# ✅ (선택) 기존 OIDC provider 참조
+data "aws_iam_openid_connect_provider" "eks" {
+  count = var.create_oidc_provider ? 0 : 1
+  url   = local.oidc_issuer_url
 }
 
+locals {
+  oidc_provider_arn = var.create_oidc_provider ? aws_iam_openid_connect_provider.eks[0].arn : data.aws_iam_openid_connect_provider.eks[0].arn
+}
+
+# ----------------------------
+# IRSA: AWS Load Balancer Controller
+# ----------------------------
 data "aws_iam_policy_document" "alb_assume_role" {
   statement {
     effect  = "Allow"
@@ -45,7 +56,7 @@ data "aws_iam_policy_document" "alb_assume_role" {
 
     principals {
       type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.eks.arn]
+      identifiers = [local.oidc_provider_arn]
     }
 
     condition {
@@ -57,7 +68,7 @@ data "aws_iam_policy_document" "alb_assume_role" {
     condition {
       test     = "StringEquals"
       variable = "${local.oidc_issuer_host}:sub"
-      values   = ["system:serviceaccount:${local.alb_sa_namespace}:${local.alb_sa_name}"]
+      values   = ["system:serviceaccount:${var.alb_service_account.namespace}:${var.alb_service_account.name}"]
     }
   }
 }
@@ -65,10 +76,10 @@ data "aws_iam_policy_document" "alb_assume_role" {
 resource "aws_iam_role" "alb_controller" {
   name               = "${var.project_name}-${var.env}-irsa-alb-controller"
   assume_role_policy = data.aws_iam_policy_document.alb_assume_role.json
-  tags               = var.tags
+  tags               = local.common_tags
 }
 
-# ALB Controller IAM Policy (AWS 권장 정책 기반)
+# ALB Controller IAM Policy (AWS 권장 정책 기반) - 기존 그대로 유지
 data "aws_iam_policy_document" "alb_controller" {
   statement {
     effect = "Allow"
@@ -176,7 +187,7 @@ data "aws_iam_policy_document" "alb_controller" {
 resource "aws_iam_policy" "alb_controller" {
   name   = "${var.project_name}-${var.env}-policy-alb-controller"
   policy = data.aws_iam_policy_document.alb_controller.json
-  tags   = var.tags
+  tags   = local.common_tags
 }
 
 resource "aws_iam_role_policy_attachment" "alb_attach" {
@@ -184,7 +195,9 @@ resource "aws_iam_role_policy_attachment" "alb_attach" {
   policy_arn = aws_iam_policy.alb_controller.arn
 }
 
+# ----------------------------
 # IRSA: Cluster Autoscaler
+# ----------------------------
 data "aws_iam_policy_document" "ca_assume_role" {
   statement {
     effect  = "Allow"
@@ -192,7 +205,7 @@ data "aws_iam_policy_document" "ca_assume_role" {
 
     principals {
       type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.eks.arn]
+      identifiers = [local.oidc_provider_arn]
     }
 
     condition {
@@ -204,7 +217,7 @@ data "aws_iam_policy_document" "ca_assume_role" {
     condition {
       test     = "StringEquals"
       variable = "${local.oidc_issuer_host}:sub"
-      values   = ["system:serviceaccount:${local.ca_sa_namespace}:${local.ca_sa_name}"]
+      values   = ["system:serviceaccount:${var.cluster_autoscaler_service_account.namespace}:${var.cluster_autoscaler_service_account.name}"]
     }
   }
 }
@@ -212,7 +225,7 @@ data "aws_iam_policy_document" "ca_assume_role" {
 resource "aws_iam_role" "cluster_autoscaler" {
   name               = "${var.project_name}-${var.env}-irsa-cluster-autoscaler"
   assume_role_policy = data.aws_iam_policy_document.ca_assume_role.json
-  tags               = var.tags
+  tags               = local.common_tags
 }
 
 data "aws_iam_policy_document" "cluster_autoscaler" {
@@ -242,7 +255,7 @@ data "aws_iam_policy_document" "cluster_autoscaler" {
 resource "aws_iam_policy" "cluster_autoscaler" {
   name   = "${var.project_name}-${var.env}-policy-cluster-autoscaler"
   policy = data.aws_iam_policy_document.cluster_autoscaler.json
-  tags   = var.tags
+  tags   = local.common_tags
 }
 
 resource "aws_iam_role_policy_attachment" "ca_attach" {

@@ -54,7 +54,8 @@ resource "aws_iam_policy" "failover_policy" {
           "ec2:AssociateAddress",
           "ec2:DescribeAddresses",
           "ec2:ReplaceRoute",
-          "ec2:DescribeRouteTables"
+          "ec2:DescribeRouteTables",
+          "ec2:DescribeNetworkInterfaces"
         ],
         Resource = "*"
       }
@@ -100,7 +101,7 @@ resource "aws_cloudwatch_metric_alarm" "active_failed" {
   statistic           = "Maximum"
   period              = var.alarm_period
   evaluation_periods  = var.alarm_evaluation_periods
-  threshold           = 1
+  threshold           = 1 
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
 
@@ -116,6 +117,11 @@ resource "aws_lambda_permission" "allow_cloudwatch" {
   statement_id  = "AllowExecutionFromCloudWatch"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.failover.function_name
+
   principal     = "cloudwatch.amazonaws.com"
   source_arn    = aws_cloudwatch_metric_alarm.active_failed.arn
+
+  source_account = data.aws_caller_identity.current.account_id
 }
+
+data "aws_caller_identity" "current" {}

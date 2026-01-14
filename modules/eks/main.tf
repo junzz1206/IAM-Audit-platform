@@ -44,7 +44,7 @@ resource "aws_eks_cluster" "this" {
 # IAM Role – NodeGroup 공통
 resource "aws_iam_role" "eks_node" {
   name = "${var.project_name}-${var.env}-eks-node-role"
-
+  
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -72,6 +72,7 @@ resource "aws_iam_role_policy_attachment" "node_policies" {
 resource "aws_eks_node_group" "ui" {
   cluster_name    = aws_eks_cluster.this.name
   node_group_name = "ng-ui"
+  ami_type = "AL2_x86_64"
   node_role_arn   = aws_iam_role.eks_node.arn
   subnet_ids      = var.private_subnet_ids
 
@@ -80,6 +81,10 @@ resource "aws_eks_node_group" "ui" {
     min_size     = 1
     max_size     = 2
   }
+  
+  depends_on = [ 
+    aws_iam_role_policy_attachment.node_policies
+  ]
 
   labels = {
     workload = "ui"
@@ -94,15 +99,20 @@ resource "aws_eks_node_group" "ui" {
 resource "aws_eks_node_group" "iam" {
   cluster_name    = aws_eks_cluster.this.name
   node_group_name = "ng-iam"
+  ami_type = "AL2_x86_64"
   node_role_arn   = aws_iam_role.eks_node.arn
   subnet_ids      = var.private_subnet_ids
 
   scaling_config {
-    desired_size = 1
+    desired_size = 2
     min_size     = 1
-    max_size     = 2
+    max_size     = 3
   }
-
+  
+  depends_on = [ 
+    aws_iam_role_policy_attachment.node_policies
+  ]
+  
   labels = {
     workload = "iam"
   }

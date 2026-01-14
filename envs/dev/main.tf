@@ -139,7 +139,6 @@ module "wireguard_ha" {
 
   wg_addresses = var.wg_addresses
 
-  # ami_id 비우면 최신 AL2023 자동 선택
   ami_id = data.aws_ami.amazon_linux_2.id
 }
 
@@ -180,7 +179,7 @@ module "valkey" {
   subnet_ids = module.network.private_subnet_ids
 
   # 중요: EKS 모듈에서 이 output이 나와야 함
-  eks_worker_sg_id = module.eks.worker_security_group_id
+  eks_worker_sg_id = module.eks.cluster_security_group_id
 
   # 아래는 tfvars로 조절 가능
   engine_version          = var.valkey_engine_version
@@ -192,3 +191,42 @@ module "valkey" {
   auto_minor_version_upgrade = var.valkey_auto_minor_version_upgrade
 }
 
+#aws_load_balancer_controller
+module "aws_load_balancer_controller" {
+  source = "../../modules/aws_load_balancer_controller"
+
+  # (EKS)
+  cluster_name = module.eks.cluster_name
+  region       = var.aws_region
+  vpc_id       = module.network.vpc_id
+
+  # (IRSA outputs 그대로 사용)
+  oidc_provider_arn = module.irsa.oidc_provider_arn
+  oidc_provider_url = module.irsa.oidc_issuer_url
+
+  # (Policy 파일은 repo에 포함된 파일을 path.module 기준으로 참조)
+  iam_policy_json_path = "${path.module}/../../modules/aws_load_balancer_controller/policy/iam_policy.json"
+
+  # provider alias wiring (중요)
+  providers = {
+    kubernetes = kubernetes.eks
+    helm       = helm.eks
+  }
+
+  # 권장: 클러스터/OIDC가 준비된 뒤 설치되도록 안정성 보강
+  depends_on = [
+    module.eks,
+    module.irsa
+  ]
+}
+
+#route53_zone
+module "route53" {
+  source = "./modules/route53_zone"
+
+  domain_name              = var.domain_name          # rockyvicky.com
+  create_hosted_zone       = true
+  create_externaldns_policy = true
+
+  tags = var.tags
+}
