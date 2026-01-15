@@ -1,20 +1,33 @@
-# .gitignore 내용
-
-# 1. 테라폼 바이너리 및 플러그인 (용량 크고 필요 없음)
-.terraform/
-.terraform.lock.hcl
-
-# 2. 상태 파일 (★ 절대 올리면 안 됨 - 민감 정보 포함)
+# Terraform
+**/.terraform/*
 *.tfstate
 *.tfstate.*
+*.tfplan
+*.lock.hcl
 
-# 3. 변수 정의 파일 (내 IP, 비밀번호 등 포함)
+# Terraform override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Variables (민감정보)
 *.tfvars
-*.auto.tfvars
+*.tfvars.json
 
-# 4. 크래시 로그
+# Crash logs
 crash.log
+crash.*.log
 
-# 5. OS 및 에디터 설정 파일
-.DS_Store
+# Editor/OS
 .vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local logs / outputs
+out.json
+*.log
+
+# Archives
+*.zip
