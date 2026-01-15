@@ -231,3 +231,15 @@ variable "wg_private_key" {
   type        = string
   sensitive   = true
 }
+
+# frontend (S3 + CloudFront)
+
+variable "frontend_bucket_name" {
+  description = "S3 bucket name for static frontend (already exists or to be created)"
+  type        = string
+}
+
+variable "cloudfront_acm_arn" {
+  description = "ACM certificate ARN in us-east-1 for CloudFront"
+  type        = string
+}

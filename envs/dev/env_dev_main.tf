@@ -270,3 +270,28 @@ module "wg_failover" {
 
   tags = local.tags
 }
+
+# =========================================
+# 10) frontend
+# =========================================
+
+module "frontend" {
+  source = "../../modules/frontend"
+
+  providers = {
+  aws      = aws
+  aws.use1 = aws.use1
+  }
+  
+  name_prefix     = "${var.project_name}-${var.env}"
+
+  domain_name    = var.domain_name
+  hosted_zone_id = module.route53.hosted_zone_id
+
+  bucket_name         = var.frontend_bucket_name
+  cloudfront_acm_arn  = var.cloudfront_acm_arn
+  distribution_comment = "rockyvicky-frontend"
+
+  tags = local.tags
+
+}

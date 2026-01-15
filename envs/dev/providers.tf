@@ -3,6 +3,13 @@ provider "aws" {
   profile = var.aws_profile != "" ? var.aws_profile : null
 }
 
+# CloudFront ACM은 us-east-1 필수
+provider "aws" {
+  alias   = "use1"
+  region  = "us-east-1"
+  profile = var.aws_profile != "" ? var.aws_profile : null
+}
+
 # EKS 생성 이후 조회되도록 depends_on 추가
 data "aws_eks_cluster" "this" {
   name       = module.eks.cluster_name
@@ -52,3 +59,4 @@ provider "helm" {
     token                  = data.aws_eks_cluster_auth.this.token
   }
 }
+
