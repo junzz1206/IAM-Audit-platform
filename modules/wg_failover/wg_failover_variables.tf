@@ -14,7 +14,18 @@ variable "alarm_period" {
   type    = number
   default = 60
 }
+
 variable "alarm_evaluation_periods" {
+  type    = number
+  default = 2
+}
+
+variable "log_retention_days" {
+  type    = number
+  default = 14
+}
+
+variable "alarm_datapoints_to_alarm" {
   type    = number
   default = 2
 }

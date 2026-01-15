@@ -9,14 +9,13 @@ terraform {
 
 data "aws_region" "current" {}
 
-# 최신 Amazon Linux 2023 AMI (ami_id 미지정 시)
-data "aws_ssm_parameter" "al2023_ami" {
+data "aws_ssm_parameter" "al2_ami" {
   count = var.ami_id == "" ? 1 : 0
-  name  = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64"
+  name  = "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2"
 }
 
 locals {
-  ami = var.ami_id != "" ? var.ami_id : data.aws_ssm_parameter.al2023_ami[0].value
+  ami = var.ami_id != "" ? var.ami_id : data.aws_ssm_parameter.al2_ami[0].value
 
   common_tags = merge(var.tags, {
     Env       = var.env
@@ -75,6 +74,12 @@ resource "aws_instance" "wg" {
   user_data = templatefile("${path.module}/userdata.sh.tpl", {
     wg_address = var.wg_addresses[count.index]
     wg_port    = var.wireguard_port
+    wg_private_key = var.wg_private_key
+    onprem_peer_public_key = var.onprem_peer_public_key
+    onprem_peer_endpoint   = var.onprem_peer_endpoint
+    onprem_allowed_ips     = var.onprem_allowed_ips
+
+    VPC_CIDR               = var.vpc_cidr
   })
 
   tags = merge(local.common_tags, {
@@ -95,6 +100,10 @@ resource "aws_eip" "wg" {
 resource "aws_eip_association" "wg" {
   allocation_id        = aws_eip.wg.allocation_id
   network_interface_id = aws_instance.wg[0].primary_network_interface_id
+
+  lifecycle {
+    ignore_changes = [network_interface_id]
+  }
 }
 
 # Private RT에 온프렘 CIDR 라우트 추가 (초기 Active ENI로)
@@ -102,4 +111,8 @@ resource "aws_route" "to_onprem" {
   route_table_id         = var.private_route_table_id
   destination_cidr_block = var.onprem_cidr
   network_interface_id   = aws_instance.wg[0].primary_network_interface_id
+
+  lifecycle {
+    ignore_changes = [network_interface_id]
+  }
 }

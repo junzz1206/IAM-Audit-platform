@@ -1,4 +1,4 @@
-resource "kubernetes_service_account" "external_dns" {
+resource "kubernetes_service_account_v1" "external_dns" {
   metadata {
     name      = "external-dns"
     namespace = "kube-system"

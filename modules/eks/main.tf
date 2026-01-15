@@ -1,4 +1,10 @@
-# IAM Role – EKS Cluster
+locals {
+  effective_cluster_name = var.cluster_name != "" ? var.cluster_name : "${var.project_name}-${var.env}-eks"
+}
+
+############################################
+# 1) IAM Role – EKS Cluster
+############################################
 resource "aws_iam_role" "eks_cluster" {
   name = "${var.project_name}-${var.env}-eks-cluster-role"
 
@@ -19,32 +25,55 @@ resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
 }
 
-# EKS Cluster (Public & Private Endpoint)
+resource "aws_iam_role_policy_attachment" "eks_vpc_resource_controller" {
+  role       = aws_iam_role.eks_cluster.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSVPCResourceController"
+}
+
+############################################
+# 2) EKS Cluster
+############################################
 resource "aws_eks_cluster" "this" {
-  name     = "${var.project_name}-${var.env}-eks"
-  version  = var.eks_version
+  name     = local.effective_cluster_name
   role_arn = aws_iam_role.eks_cluster.arn
+  version  = var.eks_version
 
   vpc_config {
     subnet_ids              = var.private_subnet_ids
-    endpoint_public_access  = true
-    endpoint_private_access = true
+    endpoint_public_access  = var.endpoint_public_access
+    endpoint_private_access = var.endpoint_private_access
     public_access_cidrs     = var.admin_cidr_blocks
   }
 
-  tags = merge(var.tags, {
-    Name = "${var.project_name}-${var.env}-eks"
-  })
+  tags = var.tags
 
   depends_on = [
-    aws_iam_role_policy_attachment.eks_cluster_policy
+    aws_iam_role_policy_attachment.eks_cluster_policy,
+    aws_iam_role_policy_attachment.eks_vpc_resource_controller
   ]
 }
 
-# IAM Role – NodeGroup 공통
+############################################
+# 3) OIDC Provider (IRSA)
+############################################
+data "tls_certificate" "oidc" {
+  url = aws_eks_cluster.this.identity[0].oidc[0].issuer
+}
+
+resource "aws_iam_openid_connect_provider" "this" {
+  url             = aws_eks_cluster.this.identity[0].oidc[0].issuer
+  client_id_list  = ["sts.amazonaws.com"]
+  thumbprint_list = [data.tls_certificate.oidc.certificates[0].sha1_fingerprint]
+
+  tags = var.tags
+}
+
+############################################
+# 4) IAM Role – EKS NodeGroup
+############################################
 resource "aws_iam_role" "eks_node" {
   name = "${var.project_name}-${var.env}-eks-node-role"
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -57,67 +86,97 @@ resource "aws_iam_role" "eks_node" {
   tags = var.tags
 }
 
-resource "aws_iam_role_policy_attachment" "node_policies" {
-  for_each = toset([
-    "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy",
-    "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy",
-    "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
-  ])
-
+resource "aws_iam_role_policy_attachment" "node_worker" {
   role       = aws_iam_role.eks_node.name
-  policy_arn = each.value
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
 }
 
-# NodeGroup – Admin UI
-resource "aws_eks_node_group" "ui" {
+resource "aws_iam_role_policy_attachment" "node_cni" {
+  role       = aws_iam_role.eks_node.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+}
+
+resource "aws_iam_role_policy_attachment" "node_ecr_readonly" {
+  role       = aws_iam_role.eks_node.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
+
+############################################
+# 5) Optional: Node Security Group + Launch Template
+############################################
+resource "aws_security_group" "node" {
+  count  = var.create_node_security_group ? 1 : 0
+  name   = "${var.project_name}-${var.env}-eks-node-sg"
+  vpc_id = var.vpc_id
+
+  description = "EKS managed nodegroup security group (optional)"
+
+  # 최소한의 내부 통신(필요시 추후 조정)
+  ingress {
+    description = "Node to node"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    self        = true
+  }
+
+  egress {
+    description = "All outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = var.tags
+}
+
+resource "aws_launch_template" "node" {
+  count = var.create_node_security_group ? 1 : 0
+
+  name_prefix = "${var.project_name}-${var.env}-eks-ng-"
+
+  network_interfaces {
+    security_groups = [aws_security_group.node[0].id]
+  }
+
+  tags = var.tags
+}
+
+############################################
+# 6) Managed NodeGroups
+############################################
+resource "aws_eks_node_group" "this" {
+  for_each = var.node_groups
+
   cluster_name    = aws_eks_cluster.this.name
-  node_group_name = "ng-ui"
-  ami_type = "AL2_x86_64"
+  node_group_name = each.key
   node_role_arn   = aws_iam_role.eks_node.arn
   subnet_ids      = var.private_subnet_ids
 
   scaling_config {
-    desired_size = 1
-    min_size     = 1
-    max_size     = 2
+    desired_size = each.value.desired_size
+    min_size     = each.value.min_size
+    max_size     = each.value.max_size
   }
-  
-  depends_on = [ 
-    aws_iam_role_policy_attachment.node_policies
+
+  instance_types = each.value.instance_types
+
+  labels = each.value.labels
+
+  dynamic "launch_template" {
+    for_each = var.create_node_security_group ? [1] : []
+    content {
+      id      = aws_launch_template.node[0].id
+      version = "$Latest"
+    }
+  }
+
+  tags = var.tags
+
+  depends_on = [
+    aws_iam_role_policy_attachment.node_worker,
+    aws_iam_role_policy_attachment.node_cni,
+    aws_iam_role_policy_attachment.node_ecr_readonly
   ]
-
-  labels = {
-    workload = "ui"
-  }
-
-  tags = merge(var.tags, {
-    Name = "ng-ui"
-  })
-}
-
-# NodeGroup – IAM API (WireGuard 통과 주체)
-resource "aws_eks_node_group" "iam" {
-  cluster_name    = aws_eks_cluster.this.name
-  node_group_name = "ng-iam"
-  ami_type = "AL2_x86_64"
-  node_role_arn   = aws_iam_role.eks_node.arn
-  subnet_ids      = var.private_subnet_ids
-
-  scaling_config {
-    desired_size = 2
-    min_size     = 1
-    max_size     = 3
-  }
-  
-  depends_on = [ 
-    aws_iam_role_policy_attachment.node_policies
-  ]
-  
-  labels = {
-    workload = "iam"
-  }
-
-  tags = merge(var.tags, {
-    Name = "ng-iam"
-  })
 }

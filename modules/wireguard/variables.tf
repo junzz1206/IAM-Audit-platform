@@ -4,6 +4,11 @@ variable "tags"        { type = map(string) }
 
 variable "vpc_id" { type = string }
 
+variable "vpc_cidr" {
+  description = "VPC CIDR (used in userdata template)"
+  type        = string
+}
+
 variable "public_subnet_ids" {
   description = "Public subnets for VPN EC2s (2 subnets in different AZ recommended)"
   type        = list(string)
@@ -49,4 +54,26 @@ variable "wg_addresses" {
   description = "WG tunnel interface addresses for [active, standby]. Example: [\"10.200.0.1/24\", \"10.200.0.2/24\"]"
   type        = list(string)
   default     = ["10.200.0.1/24", "10.200.0.2/24"]
+}
+
+variable "wg_private_key" {
+  description = "WireGuard private key for the gateway (active/standby 동일 키 사용 전제)"
+  type        = string
+  sensitive   = true
+}
+
+variable "onprem_peer_public_key" {
+  description = "WireGuard public key of on-prem peer"
+  type        = string
+  sensitive   = true
+}
+
+variable "onprem_peer_endpoint" {
+  description = "On-prem peer endpoint in host:port format (e.g. 1.2.3.4:51820)"
+  type        = string
+}
+
+variable "onprem_allowed_ips" {
+  description = "AllowedIPs to route to on-prem via WG (e.g. [\"192.168.1.0/24\"])"
+  type        = list(string)
 }

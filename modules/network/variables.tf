@@ -34,3 +34,15 @@ variable "tags" {
   description = "Common tags"
   default     = {}
 }
+
+variable "cluster_tag_name" {
+  type        = string
+  description = "EKS cluster name used for kubernetes.io/cluster/<name> subnet tags"
+  default     = null
+}
+
+variable "enable_nat_gateway" {
+  type        = bool
+  description = "Create NAT Gateway and private route to internet"
+  default     = true
+}

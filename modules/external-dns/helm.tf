@@ -1,9 +1,20 @@
+terraform {
+  required_providers {
+    helm = {
+      source  = "hashicorp/helm"
+    }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+    }
+  }
+}
+
 resource "helm_release" "external_dns" {
   name       = "external-dns"
   namespace  = "kube-system"
   repository = "https://kubernetes-sigs.github.io/external-dns/"
   chart      = "external-dns"
-  version    = "1.14.4"
+  version    = var.helm_chart_version
 
   values = [yamlencode({
     provider = "aws"
@@ -13,27 +24,18 @@ resource "helm_release" "external_dns" {
       name   = "external-dns"
     }
 
-    domainFilters = [
-      var.domain
-    ]
+    domainFilters = [var.domain]
 
-    policy = "upsert-only"
+    policy     = var.policy
+    registry   = "txt"
+    txtOwnerId = var.txt_owner_id
 
-    registry = "txt"
-    txtOwnerId = "${var.project_name}-${var.env}"
-
-    sources = [
-      "ingress"
-    ]
-
-    aws = {
-      zoneType = "public"
-    }
+    sources = ["ingress"]
 
     logLevel = "info"
   })]
 
   depends_on = [
-    kubernetes_service_account.external_dns
+    kubernetes_service_account_v1.external_dns
   ]
 }

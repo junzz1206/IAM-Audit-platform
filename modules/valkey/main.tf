@@ -66,6 +66,7 @@ resource "aws_elasticache_replication_group" "this" {
 
   at_rest_encryption_enabled = true
   transit_encryption_enabled = true
+  transit_encryption_mode = var.transit_encryption_mode
 
   snapshot_retention_limit    = var.snapshot_retention_days
   auto_minor_version_upgrade  = var.auto_minor_version_upgrade

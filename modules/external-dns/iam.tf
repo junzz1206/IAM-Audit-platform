@@ -1,34 +1,3 @@
-data "aws_iam_openid_connect_provider" "eks" {
-  url = aws_eks_cluster_oidc_url
-}
-
-resource "aws_iam_policy" "external_dns" {
-  name = "${var.project_name}-${var.env}-externaldns-policy"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "route53:ChangeResourceRecordSets"
-        ]
-        Resource = "arn:aws:route53:::hostedzone/${var.hosted_zone_id}"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "route53:ListHostedZones",
-          "route53:ListResourceRecordSets"
-        ]
-        Resource = "*"
-      }
-    ]
-  })
-
-  tags = var.tags
-}
-
 resource "aws_iam_role" "external_dns" {
   name = "${var.project_name}-${var.env}-external-dns-role"
 
@@ -38,12 +7,13 @@ resource "aws_iam_role" "external_dns" {
       {
         Effect = "Allow"
         Principal = {
-          Federated = aws_iam_openid_connect_provider.eks.arn
+          Federated = var.oidc_provider_arn
         }
-        Action = "sts:AssumeRoleWithWebIdentity",
+        Action = "sts:AssumeRoleWithWebIdentity"
         Condition = {
           StringEquals = {
-            "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub" = "system:serviceaccount:kube-system:external-dns"
+            "${replace(var.oidc_issuer_url, "https://", "")}:sub" = "system:serviceaccount:kube-system:external-dns"
+            "${replace(var.oidc_issuer_url, "https://", "")}:aud" = "sts.amazonaws.com"
           }
         }
       }
@@ -51,6 +21,37 @@ resource "aws_iam_role" "external_dns" {
   })
 
   tags = var.tags
+}
+
+resource "aws_iam_policy" "external_dns" {
+  name        = "${var.project_name}-${var.env}-external-dns-policy"
+  description = "ExternalDNS policy scoped to hosted zone"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      # 레코드 변경은 Hosted Zone 범위로 제한
+      {
+        Effect   = "Allow"
+        Action   = ["route53:ChangeResourceRecordSets"]
+        Resource = "arn:aws:route53:::hostedzone/${var.hosted_zone_id}"
+      },
+      # 조회 계열은 전역 리소스(*) 필요
+      {
+        Effect = "Allow"
+        Action = [
+          "route53:ListHostedZones",
+          "route53:ListResourceRecordSets"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["route53:GetChange"]
+        Resource = "arn:aws:route53:::change/*"
+      }
+    ]
+  })
 }
 
 resource "aws_iam_role_policy_attachment" "external_dns" {

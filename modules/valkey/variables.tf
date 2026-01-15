@@ -42,12 +42,12 @@ variable "node_type" {
 # cluster mode enabled => shard 기반
 variable "num_node_groups" {
   type    = number
-  default = 2
+  default = 1
 }
 
 variable "replicas_per_node_group" {
   type    = number
-  default = 2
+  default = 1
 }
 
 variable "parameter_group_name" {
@@ -63,4 +63,9 @@ variable "snapshot_retention_days" {
 variable "auto_minor_version_upgrade" {
   type    = bool
   default = true
+}
+
+variable "transit_encryption_mode" {
+  type    = string
+  default = "required" # TLS only
 }
