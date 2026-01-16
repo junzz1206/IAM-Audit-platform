@@ -14,7 +14,7 @@ variable "name" {
 
 variable "description" {
   type        = string
-  default     = "WAFv2 Web ACL for ALB (Regional)"
+  default     = "WAFv2 Web ACL for ALB - Regional"
   description = "Web ACL description"
 }
 
