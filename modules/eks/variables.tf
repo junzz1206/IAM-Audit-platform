@@ -81,3 +81,30 @@ variable "create_node_security_group" {
   description = "Create dedicated node security group and attach via launch template"
   default     = false
 }
+
+# validation은 변수 값이 “말이 안 되는 상태”로 들어오는 걸 미리 막는 안전장치
+variable "create_oidc_provider" {
+  type    = bool
+  default = true
+}
+
+variable "existing_oidc_provider_arn" {
+  type    = string
+  default = ""
+
+  validation {
+    condition = (
+      var.create_oidc_provider
+      || (length(trimspace(var.existing_oidc_provider_arn)) > 0)
+    )
+    error_message = "create_oidc_provider=false 이면 existing_oidc_provider_arn 을 반드시 입력해야 합니다."
+  }
+
+  validation {
+    condition = (
+      var.create_oidc_provider
+      || can(regex("^arn:aws:iam::[0-9]{12}:oidc-provider/.+", var.existing_oidc_provider_arn))
+    )
+    error_message = "existing_oidc_provider_arn 형식이 IAM OIDC Provider ARN이 아닙니다. 예: arn:aws:iam::<ACCOUNT_ID>:oidc-provider/oidc.eks...."
+  }
+}

@@ -91,6 +91,9 @@ module "eks" {
   # EKS endpoint 접근 CIDR(있으면 권장)
   admin_cidr_blocks  = var.admin_cidr_blocks
 
+  create_oidc_provider        = var.create_oidc_provider
+  existing_oidc_provider_arn  = var.existing_oidc_provider_arn
+
   tags = local.tags
 }
 
@@ -102,6 +105,37 @@ module "route53" {
 
   domain_name  = var.domain_name
   private_zone = false
+}
+
+data "aws_lb" "api" {
+  count = var.manage_api_dns ? 1 : 0
+  name  = var.api_alb_name
+}
+
+resource "aws_route53_record" "api_a" {
+  count   = var.manage_api_dns ? 1 : 0
+  zone_id = module.route53.hosted_zone_id
+  name    = "api.${var.domain_name}"
+  type    = "A"
+
+  alias {
+    name                   = "dualstack.${data.aws_lb.api[0].dns_name}"
+    zone_id                = data.aws_lb.api[0].zone_id
+    evaluate_target_health = false
+  }
+}
+
+resource "aws_route53_record" "api_aaaa" {
+  count   = var.manage_api_dns ? 1 : 0
+  zone_id = module.route53.hosted_zone_id
+  name    = "api.${var.domain_name}"
+  type    = "AAAA"
+
+  alias {
+    name                   = "dualstack.${data.aws_lb.api[0].dns_name}"
+    zone_id                = data.aws_lb.api[0].zone_id
+    evaluate_target_health = false
+  }
 }
 
 # =========================================

@@ -78,6 +78,7 @@ variable "onprem_allowed_ips" {
 variable "hosted_zone_id" {
   description = "Route53 Hosted Zone ID for rockyvicky.com"
   type        = string
+  default     = null
 }
 
 variable "externaldns_domain" {
@@ -104,6 +105,18 @@ variable "alb_controller_chart_version" {
   description = "Helm chart version for aws-load-balancer-controller (chart version, not appVersion)"
   type        = string
   default     = "1.17.1"
+}
+
+variable "manage_api_dns" {
+  description = "true면 api.rockyvicky.com -> ALB Route53 alias 레코드를 생성/관리"
+  type        = bool
+  default     = false
+}
+
+variable "api_alb_name" {
+  description = "Ingress가 생성한 ALB 이름 (예: rockyvicky-dev-alb)"
+  type        = string
+  default     = "rockyvicky-dev-alb"
 }
 
 # Valkey (ElastiCache)
@@ -242,4 +255,15 @@ variable "frontend_bucket_name" {
 variable "cloudfront_acm_arn" {
   description = "ACM certificate ARN in us-east-1 for CloudFront"
   type        = string
+}
+
+# eks
+variable "create_oidc_provider" {
+  type    = bool
+  default = true
+}
+
+variable "existing_oidc_provider_arn" {
+  type    = string
+  default = ""
 }

@@ -12,12 +12,12 @@ provider "aws" {
 
 # EKS 생성 이후 조회되도록 depends_on 추가
 data "aws_eks_cluster" "this" {
-  name       = module.eks.cluster_name
+  name       = var.eks_cluster_name
   depends_on = [module.eks]
 }
 
 data "aws_eks_cluster_auth" "this" {
-  name       = module.eks.cluster_name
+  name       = var.eks_cluster_name
   depends_on = [module.eks]
 }
 

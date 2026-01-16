@@ -6,7 +6,7 @@ locals {
 
   subnet_group_name = "${var.name_prefix}-${var.env}-valkey-subnet-group"
   sg_name           = "${var.name_prefix}-${var.env}-valkey-sg"
-  rg_id             = "${var.name_prefix}-${var.env}-valkey-rg"
+  rg_id = substr(replace("${var.name_prefix}-valkey-rg", "_", "-"), 0, 40)
 }
 
 resource "aws_elasticache_subnet_group" "this" {

@@ -11,7 +11,7 @@ output "cluster_security_group_id" {
 }
 
 output "oidc_provider_arn" {
-  value = aws_iam_openid_connect_provider.this.arn
+  value = var.create_oidc_provider ? aws_iam_openid_connect_provider.this[0].arn : var.existing_oidc_provider_arn
 }
 
 output "oidc_issuer_url" {

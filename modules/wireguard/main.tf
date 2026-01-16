@@ -77,7 +77,7 @@ resource "aws_instance" "wg" {
     wg_private_key = var.wg_private_key
     onprem_peer_public_key = var.onprem_peer_public_key
     onprem_peer_endpoint   = var.onprem_peer_endpoint
-    onprem_allowed_ips     = var.onprem_allowed_ips
+    onprem_allowed_ips     = join(", ", var.onprem_allowed_ips)
 
     VPC_CIDR               = var.vpc_cidr
   })
